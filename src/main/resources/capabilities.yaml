@@ -1,0 +1,62 @@
+# 能力目录：plan 校验的供给白名单。name 唯一；produces 声明该能力产出的逻辑数据项；
+# executor 为 Spring bean 名（对应 execution/executors 下的 @Component）。
+capabilities:
+  - name: sales_summary_query
+    description: 汇总时间范围内销售额/订单量/客单价，并与基线期对比
+    params: [time_range, baseline]
+    produces: [metric_delta, order_delta, aov_delta, current_total, baseline_total]
+    executor: salesSummaryQueryExecutor
+
+  - name: sku_sales_breakdown
+    description: SKU 维度销售贡献拆解，产出变化贡献最大的单品榜单（涨跌都含，按 |delta| 排序）
+    params: [time_range, baseline]
+    produces: [top_contributors]
+    executor: skuSalesBreakdownExecutor
+
+  - name: category_sales_breakdown
+    description: 品类维度销售拆解
+    params: [time_range, baseline]
+    produces: [category_breakdown]
+    executor: categorySalesBreakdownExecutor
+
+  - name: sku_status_query
+    description: 查询 SKU 上下架状态与最近一次下架时间
+    params: [sku]
+    produces: [delisting_time, listing_status]
+    executor: skuStatusQueryExecutor
+
+  - name: sku_sales_history
+    description: 单 SKU 销售历史：当前期总量/日均/占比/销售变化量（带符号）/贡献率（贡献率依赖上游输入 total_delta）
+    params: [sku, time_range]
+    produces: [sku_daily_avg_sales, sku_total_sales, sku_sales_share, sales_delta, contribution_ratio]
+    executor: skuSalesHistoryExecutor
+
+  - name: substitute_sku_analysis
+    description: 同品类其他 SKU 销量变化，评估替代效应
+    params: [sku, time_range]
+    produces: [substitution_effect]
+    executor: substituteSkuAnalysisExecutor
+
+  - name: campaign_query
+    description: 活动对比：当前期 vs 基线期的活动有无及活动期销售
+    params: [time_range, baseline]
+    produces: [campaign_comparison]
+    executor: campaignQueryExecutor
+
+  - name: traffic_conversion_query
+    description: 流量（曝光/进店UV）与转化率对比
+    params: [time_range, baseline]
+    produces: [traffic_delta, conversion_delta]
+    executor: trafficConversionQueryExecutor
+
+  - name: price_change_query
+    description: 价格变化排查。作用域三级收敛：指定 sku 则只查该 SKU；否则复用上游 top_contributors；都没有则全店扫描按销售额加权取 TopN
+    params: [sku, time_range]
+    produces: [price_changes]
+    executor: priceChangeQueryExecutor
+
+  - name: stockout_query
+    description: 缺货事件查询
+    params: [time_range]
+    produces: [stockout_events]
+    executor: stockoutQueryExecutor

@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: merchant-business-analysis-agent
+  datasource:
+    # WAL + busy_timeout：步骤并发执行后读并发增多；WAL 允许读写并发，写冲突时等待而非立即报 database is locked
+    url: jdbc:sqlite:./merchant_analysis.db?journal_mode=WAL&busy_timeout=5000
+    driver-class-name: org.sqlite.JDBC
+    hikari:
+      maximum-pool-size: 8   # 与 ExecutionService 层内并发线程池（4）匹配，留有余量
+  sql:
+    init:
+      mode: always           # 启动时执行 classpath:db/tables.sql（全部语句幂等）
+      schema-locations: classpath:db/tables.sql
+
+server:
+  port: 8082
+
+# LLM 提供方：mock（默认，离线可跑）| openai（一切 OpenAI 兼容服务：OpenAI 官方、阿里云百炼、反代等）
+llm:
+  provider: ${LLM_PROVIDER:mock}
+  base-url: ${LLM_BASE_URL:https://api.openai.com}
+  api-key: ${LLM_API_KEY:}
+  model: ${LLM_MODEL:qwen-plus}
+
+logging:
+  level:
+    com.merchant.analysis: info

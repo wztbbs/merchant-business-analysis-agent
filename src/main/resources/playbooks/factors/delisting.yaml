@@ -1,0 +1,23 @@
+# 下架因子：确认下架事件 → 量化下架影响（含替代效应）
+factor: delisting
+# 证伪规则：仅当本因子是用户假设（candidate_factor）时生效——
+# 确认步骤产出 delisting_time 为 null 即判定用户假设不成立，执行期跳过本因子后续步骤
+falsification:
+  when_output_null: delisting_time
+  note: 用户假设不成立：该 SKU 查询期内无下架记录
+steps:
+  - step_id: confirm_delisting_event
+    name: 确认下架事件
+    capabilities: [sku_status_query]
+    params: { sku: "{{entity.sku}}" }
+    outputs: [delisting_time, listing_status]
+  - step_id: quantify_delisting_impact
+    name: 量化下架影响
+    depends_on: [confirm_delisting_event]
+    # 语义引用 @产出key：key 是注入 params 的参数名，value 声明"需要插槽之前产出该字段的那一步"；
+    # 编织时反查生产者步骤重写为具体引用（如 S1.metric_delta）并自动补 depends_on，
+    # 因子模块无需知道宿主骨架的步骤编号
+    inputs: { metric_delta: "@metric_delta" }
+    capabilities: [sku_sales_history, substitute_sku_analysis]
+    params: { sku: "{{entity.sku}}", time_range: "{{time_range}}" }
+    outputs: [sales_delta, contribution_ratio, substitution_effect]

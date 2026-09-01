@@ -1,0 +1,9 @@
+# 缺货因子：排查缺货事件
+# 无数据依赖：仅按时间范围查询，不引用其他步骤的产出
+factor: stockout
+steps:
+  - step_id: check_stockout_event
+    name: 缺货事件排查
+    capabilities: [stockout_query]
+    params: { time_range: "{{time_range}}" }
+    outputs: [stockout_events]

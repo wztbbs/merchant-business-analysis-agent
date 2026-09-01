@@ -1,0 +1,9 @@
+# 活动因子：活动期 vs 非活动期 / 环比活动有无
+# 无数据依赖：仅按时间范围查询对比，不引用其他步骤的产出
+factor: campaign
+steps:
+  - step_id: compare_campaign_effect
+    name: 活动影响对比
+    capabilities: [campaign_query]
+    params: { time_range: "{{time_range}}", baseline: "{{comparison_baseline}}" }
+    outputs: [campaign_comparison]

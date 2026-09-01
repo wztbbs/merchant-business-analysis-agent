@@ -1,0 +1,28 @@
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### IDE ###
+.idea/
+*.iml
+*.ipr
+*.iws
+.classpath
+.project
+.settings/
+.vscode/
+
+### OS ###
+.DS_Store
+
+### Logs ###
+*.log
+
+### SQLite 本地库 ###
+outreach.db
+outreach.db-*
+
+### Python ###
+__pycache__/
+*.pyc

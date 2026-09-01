@@ -1,0 +1,22 @@
+# 指标变化诊断骨架：确认事实 → 贡献拆解 → [因子插槽] → 综合结论
+scene: metric_change_diagnosis
+fixed_steps:
+  - step_id: confirm_change_fact
+    name: 确认变化事实
+    capabilities: [sales_summary_query]
+    params: { time_range: "{{time_range}}", baseline: "{{comparison_baseline}}" }
+    outputs: [metric_delta, order_delta, aov_delta]
+  - step_id: contribution_breakdown
+    name: 贡献度拆解
+    depends_on: [confirm_change_fact]
+    capabilities: [sku_sales_breakdown, category_sales_breakdown]
+    params: { time_range: "{{time_range}}", baseline: "{{comparison_baseline}}" }
+    outputs: [top_contributors, category_breakdown]
+factor_slot:
+  default_factors: [campaign, traffic, price, stockout]
+  include_user_candidate: true                   # 用户假设因子（candidate_factor）必选且排最前
+  default_policy: append_after_user_candidate    # 默认因子按声明顺序去重追加在假设因子之后
+final_step:
+  step_id: final_conclusion
+  name: 综合结论与建议
+  depends_on: { scope: previous_steps }          # 依赖全部前序步骤

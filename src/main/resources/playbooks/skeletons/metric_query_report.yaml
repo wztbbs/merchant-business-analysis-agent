@@ -1,0 +1,12 @@
+# 指标查询/报表骨架：单步查询 + 汇总
+scene: metric_query_report
+fixed_steps:
+  - step_id: metric_query
+    name: 指标查询
+    capabilities: [sales_summary_query]
+    params: { time_range: "{{time_range}}", baseline: "{{comparison_baseline}}" }
+    outputs: [current_total, baseline_total, metric_delta]
+final_step:
+  step_id: summary_report
+  name: 汇总报告
+  depends_on: { scope: previous_steps }

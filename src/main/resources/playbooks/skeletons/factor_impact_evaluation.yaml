@@ -1,0 +1,22 @@
+# 因子影响评估骨架：确认事件 → 前后对比 → [因子插槽：量化影响/连带替代] → 结论
+scene: factor_impact_evaluation
+fixed_steps:
+  - step_id: confirm_event_and_change
+    name: 确认事件与整体变化
+    capabilities: [sku_status_query, sales_summary_query]
+    params: { sku: "{{entity.sku}}", time_range: "{{time_range}}", baseline: "{{comparison_baseline}}" }
+    outputs: [delisting_time, listing_status, metric_delta]
+  - step_id: before_after_sales
+    name: 前后销售对比
+    depends_on: [confirm_event_and_change]
+    capabilities: [sku_sales_history]
+    params: { sku: "{{entity.sku}}", time_range: "{{time_range}}" }
+    outputs: [sku_daily_avg_sales, sku_total_sales, sku_sales_share]
+factor_slot:
+  default_factors: []                            # 该场景以用户假设因子（candidate_factor）为主，无默认因子
+  include_user_candidate: true
+  default_policy: append_after_user_candidate
+final_step:
+  step_id: final_conclusion
+  name: 综合结论与建议
+  depends_on: { scope: previous_steps }
