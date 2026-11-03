@@ -1,33 +1,68 @@
-# 评测体系与实验记录
+# 评测接口、当前验证范围与历史实验
 
-两次 LLM 调用各有评测手段，trace 直接复用 `analysis_run` / `step_run`。
+## 当前评测接口
 
-## 评测接口
+- `POST /api/eval/run {"evalType":"intent","split":"dev"}`：同步跑意图字段评测，返回 eval_run_id、eval_run、case_results。
+- `POST /api/eval/run {"evalType":"grounding"}`：对最近最多 50 条有结论的 SUCCESS analysis_run 做机械校验，不调用模型。ReAct COMPLETED 在数据库也是 SUCCESS，所以可能进入该集合；部分/预算终止运行不在此评测集合中。
+- `GET /api/eval/query/{evalRunId}`：查询批次与逐条明细。
+- `GET /api/eval/stats?evalType=intent`：按类型、模型、prompt_version 聚合。
+- `PUT /api/eval/case`：批量按 query upsert 标注，单条失败不影响其他条；返回 total/inserted/updated/failed。
 
-- `POST /api/eval/run {"evalType": "intent", "split": "dev"}` —— 触发评测（同步执行），
-  响应直接返回完整结果（eval_run 汇总 + case_results 逐条明细），附 `eval_run_id` 供事后查询。
-  `evalType=grounding` 时对最近的 SUCCESS 分析结论跑机械校验（不调 LLM）；
-- `GET /api/eval/query/{eval_run_id}` —— 按 eval_run_id 查询单批次结果（含逐 case 明细）；
-- `GET /api/eval/stats?evalType=intent` —— 跨批次聚合统计（按 eval_type + model + prompt_version
-  分组）；
-- `PUT /api/eval/case [{query, expectedScene, ...}]` —— 标注批量提交：按 query 逐条 upsert
-  （存在则更新，否则插入），单条失败不影响整批，失败明细在响应 failed 列表中返回。
+```bash
+curl -s http://localhost:8082/api/eval/run -H 'Content-Type: application/json' \
+  -d '{"evalType":"intent","split":"dev"}'
+curl -s http://localhost:8082/api/eval/case -X PUT -H 'Content-Type: application/json' \
+  -d '[{"query":"上个月全店订单量是多少","expectedScene":"metric_query_report","expectedMetric":"order_count","expectedTimeRange":"{\"type\":\"calendar_period\",\"unit\":\"month\",\"offset\":-1}","split":"dev"}]'
+```
 
-## 规则说明
+expectedTimeRange 仍是字符串字段：可放 TimeSpec 的 JSON 字符串，比较前转成规范 TimeSpec；旧 last_month/previous_month/this_month 兼容读取。其他 expected 字段为 null 时不参与该字段比较，query/expectedScene 必填。split 为 dev/test 是数据使用约定，不是系统自动封存机制。
 
-- `prompt_version` 为 prompt 文件内容哈希前 8 位（启动时计算），覆盖未 commit 的调优中间态；
-- grounding（结论校验）五项机械校验：数字出处（含百分比换算/比值派生/绝对值表述；行首编号、
-  步骤编号 S1/S2 不算业务数字；用户 query 中提到的数字视为有出处）、主因点名（单品问题不强制
-  点名店铺级主因）、假设证伪声明、实体出处（「」内只允许实体名，需在 step_results 或用户 query
-  中出现）、符号一致性（按用户所问指标取对应 delta 比对，aov/order_count 不再套用店铺级
-  metric_delta）；深层因果断言（数对但话说错）仍需 LLM-as-judge，未实现；
-- mock 模式下 intent 评测实际考的是关键词规则覆盖率，真实准确率需接真实 LLM 后跑；
-- intent 评测中单条 LLM 调用失败**不参与考核**（不进 case_result、不计入分母），失败数与明细
-  记录在 `eval_run.metrics_json` 的 `llm_call_failed` / `llm_call_errors` 字段；执行过程逐条打
-  进度日志（`[i/总数] 意图识别/LLM 响应`），服务端日志可直接跟踪；
-- split 约定：dev=调 prompt 用，test=封存回归用。
+## 指标和限制
 
-## 意图识别评测记录
+intent 当前只计 scene、metric、time_range、entity、factor 字段准确率，scene 对应兼容 primary_scene，**不是最终 routing.route**。它不执行计划，不完整计分 query 改写、in_domain、requirements 保真、文字场景匹配、历史集合指代和最终覆盖情况。不能拿旧字段分数当作新 ReAct 路由验收。
+
+单条 LLM 调用失败不进 case_results、不计入通过率分母，错误保存在 metrics_json 的 llm_call_failed/llm_call_errors；看分数时应同时看失败数量。Mock 模型分数仅验证离线规则，不表示真实模型准确率。
+
+prompt_version 是文件内容哈希前 8 位；既有评测并没有完整记录一次混合运行中全部理解、场景、工具和 ReAct 提示词的联合版本。grounding 批次使用 ConclusionService 的版本，不能据此还原每条历史结论生成时的全部配置。
+
+GroundingChecker 五类检查为数字出处、主因覆盖、假设证伪声明、实体出处、符号一致性。数字允许部分百分比换算、比值派生和绝对值表述等，规则不是严格公式证明；深层因果/语义仍未完整实现。ReAct 在线回答仅使用 number_grounding 和 entity_grounding，并另做有限的未完成措辞检查，不等于五项全作为在线门槛。
+
+## 本轮自动化验证
+
+本轮实现此前完成 `mvn test-compile -q` 及以下定向回归，共 63 项测试，0 failures/errors/skipped：
+
+```bash
+mvn -q -Dtest=ReactServiceTest,ReactTimeoutTest,ReactHistoryAndEvidenceTest,ReactHttpTest,ToolRuntimeTest,ToolCatalogTest,BusinessToolsIntegrationTest,ToolPlanTest,ToolWiringTest,AnalyzeRoutingTest,ConversationContextTest,QueryRoutingTest,QueryUnderstandingTimeTest,QueryUnderstandingFollowUpTest,ReactSceneCatalogTest,PlanWeaverTest,ExecutionServiceFalsificationTest,ExecutionTimeTest,ExecutorTimeTest test
+```
+
+| 范围 | 测试类 | 数量 |
+|---|---|---:|
+| ReAct 循环/预算 | ReactServiceTest、ReactTimeoutTest | 12 |
+| ReAct 历史/证据/HTTP | ReactHistoryAndEvidenceTest、ReactHttpTest | 7 |
+| 工具目录/运行时/业务/编排 | ToolRuntimeTest、ToolCatalogTest、BusinessToolsIntegrationTest、ToolPlanTest、ToolWiringTest | 11 |
+| API 路由/会话/理解路由 | AnalyzeRoutingTest、ConversationContextTest、QueryRoutingTest | 16 |
+| 理解时间/追问/场景 | QueryUnderstandingTimeTest、QueryUnderstandingFollowUpTest、ReactSceneCatalogTest | 9 |
+| 编织/证伪/执行时间 | PlanWeaverTest、ExecutionServiceFalsificationTest、ExecutionTimeTest、ExecutorTimeTest | 8 |
+
+此外独立的 CalculationEngineTest（14 项）和 TimeResolverTest（27 项）在前序阶段已验证，不包含于上表 63 项；具体以 target/surefire-reports 和实际执行命令为准。这些测试使用 Mock 模型，部分采用真实 SQLite 和 MockMvc；不是本轮真实供应商 LLM 的端到端效果评估，也不是全套生产验收。
+
+需要跑完整测试时使用 `mvn test`。本次仅更新 Markdown，不重新触发付费模型评测；文档做链接、示例格式和配置一致性检查。
+
+## 下一轮真实模型验收应覆盖
+
+- 五种路由与 Playbook 拒绝越界：混合子需求、SKU/品类/订单量归因、独立时间。
+- 改写保真：不改变指标、方向、时间、商品集合，不遗漏子问题。
+- 三种时间意图、月初/闰年/截止延迟和跨月追问。
+- 有文字场景/无场景 ReAct、按需接口加载、引用和完整集合边界。
+- 重复调用、A-B 循环、错误修复、超时/预算、部分完成与回答降级。
+- 历史快照、部分来源、重启恢复、截止时间不重置。
+- 每次真实模型调用量、费用和延迟，避免只报成功样本效果。
+
+## 历史记录的适用范围
+
+以下保留 2026-08-27 旧版固定模板实验原始记录，供追溯 prompt 演进。它们**不代表本轮改造后的效果**。当时“绝对月份/时间越界 → out_of_scope”、只用月份字符串等规则已被三种时间类型和当前路由替代；历史段落中的“已统一/当前/下一步”均指当时版本。请勿把历史标注继续当作新的领域定义。
+
+## 历史实验：2026-08-27 意图识别
 
 | 轮次 | 日期 | model | prompt_version | split | total | passed | case 通过率 | scene | metric | time_range | entity | factor |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -46,7 +81,7 @@ case2 剩余 2 条失败均为**标注自相矛盾**（已修标注，见下）�
 2. **"销量"的指标映射不一致**："冰淇淋销量腰斩"标注 `order_count`，"无糖可乐销量掉得厉害"原标注
    `sales_amount`——已统一为**销量→order_count**（该条改标 order_count）。
 
-## 结论校验（grounding）评测记录
+## 历史实验：2026-08-27 结论 grounding
 
 grounding 考的是结论生成 prompt（`conclusion.txt`），与意图识别是两条独立的评测线，case 编号
 各自递增。评测对象：最近 50 条 SUCCESS analysis_run 的结论；mock 时代的 run 已清空，样本全部为

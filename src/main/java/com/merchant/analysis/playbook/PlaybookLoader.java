@@ -90,9 +90,19 @@ public class PlaybookLoader {
                     strOrDefault(slot, "default_policy", "append_after_user_candidate"));
         }
 
-        Skeleton skeleton = new Skeleton(scene, fixed, factorSlot, finalStep);
+        Map<String, Object> coverage = map(root, "coverage");
+        check(coverage != null, scene + " 缺少 coverage");
+        Skeleton.Coverage contract = new Skeleton.Coverage(CapabilityCatalog.strList(coverage, "actions"),
+                CapabilityCatalog.strList(coverage, "metrics"), CapabilityCatalog.strList(coverage, "scopes"),
+                CapabilityCatalog.strList(coverage, "candidate_factors"), bool(coverage, "requires_sku", false),
+                ((Number) coverage.get("max_requirements")).intValue());
+        Skeleton skeleton = new Skeleton(scene, fixed, factorSlot, finalStep, CapabilityCatalog.str(root, "description"), contract);
         validateSkeleton(skeleton, catalog);
         return skeleton;
+    }
+
+    public List<Skeleton> skeletons() {
+        return skeletons.values().stream().sorted(java.util.Comparator.comparing(Skeleton::scene)).toList();
     }
 
     private FactorModule loadFactor(String factor, CapabilityCatalog catalog, Set<String> skeletonStepIds) {
@@ -120,6 +130,7 @@ public class PlaybookLoader {
     // ---------- 静态校验 ----------
 
     private void validateSkeleton(Skeleton skeleton, CapabilityCatalog catalog) {
+        check(skeleton.description() != null && !skeleton.description().isBlank(), skeleton.scene() + " 缺少 description");
         Set<String> ids = new HashSet<>();
         Set<String> outputNames = new HashSet<>();
         for (StepTemplate step : skeleton.fixedSteps()) {

@@ -6,7 +6,12 @@ import com.merchant.analysis.plan.PlanStep;
 import com.merchant.analysis.playbook.FactorModule;
 import com.merchant.analysis.playbook.PlaybookLoader;
 import com.merchant.analysis.time.TimeResolver;
+import com.merchant.analysis.time.ResolvedTime;
 import com.merchant.analysis.understanding.QueryUnderstanding;
+import com.merchant.analysis.tool.ToolRuntime;
+import com.merchant.analysis.tool.ToolCatalog;
+import com.merchant.analysis.calculation.CalculationEngine;
+import org.springframework.beans.factory.annotation.Autowired;
 import jakarta.annotation.PreDestroy;
 import org.springframework.stereotype.Service;
 
@@ -33,8 +38,7 @@ import java.util.concurrent.Future;
 @Service
 public class ExecutionService {
 
-    private final CapabilityCatalog catalog;
-    private final Map<String, CapabilityExecutor> executors;  // Spring 按 bean 名注入
+    private final ToolRuntime tools;
     private final TimeResolver timeResolver;
     private final RunRepository runRepository;
     private final PlaybookLoader playbookLoader;
@@ -44,8 +48,14 @@ public class ExecutionService {
     public ExecutionService(CapabilityCatalog catalog, Map<String, CapabilityExecutor> executors,
                             TimeResolver timeResolver, RunRepository runRepository,
                             PlaybookLoader playbookLoader) {
-        this.catalog = catalog;
-        this.executors = executors;
+        this(new ToolRuntime(new ToolCatalog(catalog), catalog, executors, new CalculationEngine(), timeResolver),
+                timeResolver, runRepository, playbookLoader);
+    }
+
+    @Autowired
+    public ExecutionService(ToolRuntime tools, TimeResolver timeResolver, RunRepository runRepository,
+                            PlaybookLoader playbookLoader) {
+        this.tools = tools;
         this.timeResolver = timeResolver;
         this.runRepository = runRepository;
         this.playbookLoader = playbookLoader;
@@ -85,10 +95,11 @@ public class ExecutionService {
     /** 运行准备：初始化 AnalysisContext，并恢复断点续跑中已成功步骤的产出 */
     private AnalysisContext createContext(QueryUnderstanding understanding,
                                           Map<String, Map<String, Object>> completedSteps) {
+        ResolvedTime time = understanding.resolved_time() == null
+                ? timeResolver.resolvePeriods(understanding.time_range(), understanding.comparison_baseline(), timeResolver.capture())
+                : understanding.resolved_time();
         AnalysisContext ctx = new AnalysisContext(
-                understanding,
-                timeResolver.resolve(understanding.time_range()),
-                timeResolver.resolve(understanding.comparison_baseline()));
+                understanding.withResolvedTime(time), time.current(), time.baseline());
         completedSteps.forEach(ctx::putStepResult);
         return ctx;
     }
@@ -193,22 +204,13 @@ public class ExecutionService {
      * ctx 的写入统一由主线程在层间完成，保证层内 ctx 只读、无并发修改。
      */
     private Map<String, Object> runStep(PlanStep step, String runId, AnalysisContext ctx) {
-        // params = 步骤参数 + inputs 引用解析值
-        Map<String, Object> params = new LinkedHashMap<>(step.params());
-        step.inputs().forEach((k, ref) -> {
-            int dot = ref.indexOf('.');
-            params.put(k, ctx.lookup(ref.substring(0, dot), ref.substring(dot + 1)));
-        });
-
         runRepository.markStepRunning(runId, step.stepId());
         Map<String, Object> stepOutputs = new LinkedHashMap<>();
         try {
+            Map<String, Object> params = new LinkedHashMap<>(step.params());
+            step.inputs().forEach((key, reference) -> params.put(key, Map.of("$ref", reference)));
             for (String capability : step.capabilities()) {
-                CapabilityExecutor executor = executors.get(catalog.executorBean(capability));
-                if (executor == null) {
-                    throw new IllegalStateException("找不到能力执行器 bean: " + catalog.executorBean(capability));
-                }
-                stepOutputs.putAll(executor.execute(params, ctx));
+                stepOutputs.putAll(tools.execute(capability, tools.selectArguments(capability, params), ctx));
             }
         } catch (Exception e) {
             runRepository.markStepFailed(runId, step.stepId(), String.valueOf(e.getMessage()));

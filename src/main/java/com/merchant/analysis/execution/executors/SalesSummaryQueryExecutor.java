@@ -1,6 +1,8 @@
 package com.merchant.analysis.execution.executors;
 
 import com.merchant.analysis.execution.AnalysisContext;
+import com.merchant.analysis.calculation.DecimalMath;
+import com.merchant.analysis.time.TimeParameters;
 import com.merchant.analysis.execution.CapabilityExecutor;
 import com.merchant.analysis.time.DateRange;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -26,18 +28,18 @@ public class SalesSummaryQueryExecutor implements CapabilityExecutor {
 
     @Override
     public Map<String, Object> execute(Map<String, Object> params, AnalysisContext ctx) {
-        double[] cur = summarize(ctx.current());
-        double[] base = summarize(ctx.baseline());
+        double[] cur = summarize(TimeParameters.current(params));
+        double[] base = summarize(TimeParameters.baseline(params));
 
-        double curAov = cur[1] > 0 ? cur[0] / cur[1] : 0;
-        double baseAov = base[1] > 0 ? base[0] / base[1] : 0;
+        double curAov = cur[1] > 0 ? DecimalMath.quotient(cur[0], cur[1]) : 0;
+        double baseAov = base[1] > 0 ? DecimalMath.quotient(base[0], base[1]) : 0;
 
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("current_total", round(cur[0]));
         out.put("baseline_total", round(base[0]));
-        out.put("metric_delta", round(cur[0] - base[0]));
+        out.put("metric_delta", round(DecimalMath.difference(cur[0], base[0])));
         out.put("order_delta", (long) cur[1] - (long) base[1]);
-        out.put("aov_delta", round(curAov - baseAov));
+        out.put("aov_delta", round(DecimalMath.difference(curAov, baseAov)));
         // 附加明细，供结论生成引用
         out.put("current_orders", (long) cur[1]);
         out.put("baseline_orders", (long) base[1]);

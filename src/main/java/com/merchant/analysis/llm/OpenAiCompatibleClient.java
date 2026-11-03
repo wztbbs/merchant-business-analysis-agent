@@ -44,7 +44,15 @@ public class OpenAiCompatibleClient implements LlmClient {
     }
 
     @Override
-    public String chat(String prompt) {
+    public String chat(String prompt) { return chat(prompt, java.time.Duration.ofSeconds(300)); }
+
+    @Override
+    public String chat(String prompt, java.time.Duration timeout) {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        int limit = (int) Math.max(1, Math.min(300_000, timeout.toMillis()));
+        factory.setConnectTimeout(Math.min(10_000, limit));
+        factory.setReadTimeout(limit);
+        RestClient client = restClient.mutate().requestFactory(factory).build();
         Map<String, Object> body = Map.of(
                 "model", config.getModel(),
                 "messages", List.of(Map.of("role", "user", "content", prompt)),
@@ -52,7 +60,7 @@ public class OpenAiCompatibleClient implements LlmClient {
         );
 
         try {
-            JsonNode root = restClient.post()
+            JsonNode root = client.post()
                     .uri("/v1/chat/completions")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(body)

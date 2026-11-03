@@ -10,3 +10,12 @@ final_step:
   step_id: summary_report
   name: 汇总报告
   depends_on: { scope: previous_steps }
+
+description: 全店销售额、去重订单数、客单价的两期查询；不含商品或品类分组、缺货列表和混合任务。
+coverage:
+  actions: [query]
+  metrics: [sales_amount, order_count, aov]
+  scopes: [shop]
+  candidate_factors: []
+  requires_sku: false
+  max_requirements: 3

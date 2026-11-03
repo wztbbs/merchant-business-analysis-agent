@@ -1,6 +1,7 @@
 package com.merchant.analysis.execution.executors;
 
 import com.merchant.analysis.execution.AnalysisContext;
+import com.merchant.analysis.time.TimeParameters;
 import com.merchant.analysis.execution.CapabilityExecutor;
 import com.merchant.analysis.time.DateRange;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -28,19 +29,21 @@ public class CampaignQueryExecutor implements CapabilityExecutor {
 
     @Override
     public Map<String, Object> execute(Map<String, Object> params, AnalysisContext ctx) {
-        List<Map<String, Object>> curCampaigns = campaignsIn(ctx.current());
-        List<Map<String, Object>> baseCampaigns = campaignsIn(ctx.baseline());
-        double curCampaignSales = campaignSales(ctx.current());
-        double baseCampaignSales = campaignSales(ctx.baseline());
+        List<Map<String, Object>> curCampaigns = campaignsIn(TimeParameters.current(params));
+        List<Map<String, Object>> baseCampaigns = campaignsIn(TimeParameters.baseline(params));
+        double curCampaignSales = campaignSales(TimeParameters.current(params));
+        double baseCampaignSales = campaignSales(TimeParameters.baseline(params));
 
         String comment;
         if (!baseCampaigns.isEmpty() && curCampaigns.isEmpty()) {
-            comment = String.format("前月有 %s 活动（%s）而上月无活动，活动空窗是环比下滑的次要因素。",
+            comment = String.format("基线期有 %s 活动（%s），观察期无活动。",
                     baseCampaigns.get(0).get("type"), baseCampaigns.get(0).get("rule"));
         } else if (curCampaigns.isEmpty() && baseCampaigns.isEmpty()) {
-            comment = "两期均无活动，活动不是本次变化的影响因素。";
+            comment = "两期均未查询到活动记录。";
+        } else if (baseCampaigns.isEmpty()) {
+            comment = "观察期有活动记录，基线期未查询到活动记录。";
         } else {
-            comment = "两期均有活动覆盖，活动因素基本对冲。";
+            comment = "两期均有活动记录，具体活动和销售额见查询结果。";
         }
 
         Map<String, Object> comparison = new LinkedHashMap<>();

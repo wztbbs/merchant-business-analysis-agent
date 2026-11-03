@@ -89,7 +89,8 @@ public class EvalService {
                 Map<String, Integer> pass = new LinkedHashMap<>();
                 compare(fieldStats, pass, "scene", c.expectedScene(), actual.primaryScene());
                 compare(fieldStats, pass, "metric", c.expectedMetric(), actual.metric());
-                compare(fieldStats, pass, "time_range", c.expectedTimeRange(), actual.time_range());
+                compare(fieldStats, pass, "time_range", canonicalTime(c.expectedTimeRange()),
+                        actual.time_range() == null ? null : toJson(actual.time_range()));
                 compare(fieldStats, pass, "entity", c.expectedEntitySku(), actual.skuOrNull());
                 compare(fieldStats, pass, "factor", c.expectedCandidateFactor(), actual.candidate_factor());
 
@@ -166,6 +167,18 @@ public class EvalService {
         fieldStats.get(field)[0]++;
         if (ok) {
             fieldStats.get(field)[1]++;
+        }
+    }
+
+    private static String canonicalTime(String expected) {
+        if (expected == null) return null;
+        try {
+            var spec = expected.startsWith("{")
+                    ? MAPPER.readValue(expected, com.merchant.analysis.time.TimeSpec.class)
+                    : com.merchant.analysis.time.TimeSpec.legacy(expected);
+            return toJson(spec);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("评测时间标注非法: " + expected, e);
         }
     }
 

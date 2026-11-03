@@ -4,6 +4,7 @@ TEMPLATE: followup_answer
 只使用给定数据中的事实与数字，不要编造；数据中没有的就说没有。
 
 用户问题：{{query}}
+补全后的完整需求：{{resolved_query}}
 追问类型：{{follow_up_type}}
 上次分析问题：{{prev_query}}
 上次分析结论：

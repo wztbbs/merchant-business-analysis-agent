@@ -1,6 +1,8 @@
 package com.merchant.analysis.execution.executors;
 
 import com.merchant.analysis.execution.AnalysisContext;
+import com.merchant.analysis.calculation.DecimalMath;
+import com.merchant.analysis.time.TimeParameters;
 import com.merchant.analysis.execution.CapabilityExecutor;
 import com.merchant.analysis.time.DateRange;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -26,13 +28,13 @@ public class TrafficConversionQueryExecutor implements CapabilityExecutor {
 
     @Override
     public Map<String, Object> execute(Map<String, Object> params, AnalysisContext ctx) {
-        double[] cur = traffic(ctx.current());
-        double[] base = traffic(ctx.baseline());
-        long curOrders = orders(ctx.current());
-        long baseOrders = orders(ctx.baseline());
+        double[] cur = traffic(TimeParameters.current(params));
+        double[] base = traffic(TimeParameters.baseline(params));
+        long curOrders = orders(TimeParameters.current(params));
+        long baseOrders = orders(TimeParameters.baseline(params));
 
-        double curConversion = cur[1] > 0 ? curOrders / cur[1] : 0;
-        double baseConversion = base[1] > 0 ? baseOrders / base[1] : 0;
+        double curConversion = cur[1] > 0 ? DecimalMath.quotient(curOrders, cur[1]) : 0;
+        double baseConversion = base[1] > 0 ? DecimalMath.quotient(baseOrders, base[1]) : 0;
 
         Map<String, Object> trafficDelta = new LinkedHashMap<>();
         trafficDelta.put("current_exposure", (long) cur[0]);
@@ -45,7 +47,7 @@ public class TrafficConversionQueryExecutor implements CapabilityExecutor {
         Map<String, Object> conversionDelta = new LinkedHashMap<>();
         conversionDelta.put("current_conversion", round(curConversion));
         conversionDelta.put("baseline_conversion", round(baseConversion));
-        conversionDelta.put("conversion_delta", round(curConversion - baseConversion));
+        conversionDelta.put("conversion_delta", round(DecimalMath.difference(curConversion, baseConversion)));
 
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("traffic_delta", trafficDelta);

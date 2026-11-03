@@ -1,0 +1,70 @@
+name: "min"
+description: "最小值，并列取首个。数值引用上游结果，调用者需保证指标、时间和单位可比。"
+input_schema:
+  type: "object"
+  properties:
+    input:
+      oneOf:
+        -
+          type: "object"
+          properties:
+            kind:
+              const: "values"
+            values:
+              anyOf:
+                -
+                  type: "array"
+                  items:
+                    anyOf:
+                      -
+                        $ref: "common:decimal"
+                      -
+                        $ref: "common:reference"
+                  minItems: 1
+                  maxItems: 10000
+                -
+                  $ref: "common:reference"
+          required: ["kind", "values"]
+          additionalProperties: false
+        -
+          type: "object"
+          properties:
+            kind:
+              const: "field"
+            collection:
+              anyOf:
+                -
+                  type: "array"
+                  items:
+                    type: "object"
+                  minItems: 1
+                  maxItems: 10000
+                -
+                  $ref: "common:reference"
+            field:
+              type: "string"
+              minLength: 1
+              pattern: "^[^.]+$"
+          required: ["kind", "collection", "field"]
+          additionalProperties: false
+  required: ["input"]
+  additionalProperties: false
+output_schema:
+  type: "object"
+  properties:
+    value:
+      description: "计算结果的十进制字符串，可供后续算子引用。"
+      type: "string"
+    count:
+      description: "实际参与计算的元素数，不跳过非法值。"
+      type: "integer"
+      minimum: 1
+    index:
+      description: "极值在输入集合中的零基位置；并列取首个。"
+      type: "integer"
+      minimum: 0
+    item:
+      description: "field模式命中的原始对象，保留商品等定位信息。"
+      type: "object"
+  required: ["value", "count", "index"]
+  additionalProperties: false

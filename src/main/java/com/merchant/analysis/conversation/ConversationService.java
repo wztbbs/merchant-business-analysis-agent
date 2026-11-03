@@ -92,7 +92,8 @@ public class ConversationService {
     public String recordStandaloneTurn(SessionRecord session, UnderstandingResult result, String userQuery,
                                        String answer) {
         String turnId = repository.addTurn(session.sessionId(), session.merchantId(), session.userId(),
-                userQuery, null, result.followUp(), result.followUpType(), null, result.refRunId(), answer);
+                userQuery, result.understanding().task() == null ? null : result.understanding().task().resolved_query(),
+                result.followUp(), result.followUpType(), null, result.refRunId(), answer);
         repository.touch(session.sessionId());
         return turnId;
     }

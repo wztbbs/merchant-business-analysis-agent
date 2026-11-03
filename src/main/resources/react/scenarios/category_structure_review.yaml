@@ -1,0 +1,12 @@
+id: category_structure_review
+name: 品类销售结构对照
+description: 查看品类两期销售变化和当前销售规模，按用户指定视角比较，避免执行无关的全店归因流程。
+examples:
+  - 上个月哪些品类上涨、哪些下降？再看看当前销售规模最大的品类。
+recommended_tools: [category_sales_breakdown, sum, ratio, relative_change, min, max, compare]
+guidance: |
+  查询 category_sales_breakdown，取得 current_total、baseline_total 和 delta。
+  默认顺序按 delta 绝对值排列，不能当成当前销售额排名或仅下降商品排名。根据用户问题分别检查方向和规模。
+  新的合计、占比、增长率或极值使用相应计算工具，对集合字段和数值使用结果引用。不要让模型自行计算新数值。
+  不默认查询活动、价格或缺货。用户进一步询问原因时，依据工具实际支持范围继续。
+  品类工具没有品类订单数、客单价或完整 SKU 明细；不能用全店 SKU Top10 冒充品类明细。

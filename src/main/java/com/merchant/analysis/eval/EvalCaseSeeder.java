@@ -36,7 +36,7 @@ public class EvalCaseSeeder implements CommandLineRunner {
                     "aov", "this_month", null, null, "test"},
             new String[]{"最近缺货对销售额影响大吗？", "factor_impact_evaluation",
                     "sales_amount", "last_month", null, "stockout", "test"},
-            new String[]{"帮我预测一下下个月库存够不够用", "out_of_scope",
+            new String[]{"帮我预测一下下个月库存够不够用", "other",
                     null, null, null, null, "test"},
             new String[]{"上个月销售额是多少", "metric_query_report",
                     "sales_amount", "last_month", null, null, "test"}

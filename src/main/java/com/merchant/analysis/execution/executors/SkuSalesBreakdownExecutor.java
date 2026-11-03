@@ -1,6 +1,8 @@
 package com.merchant.analysis.execution.executors;
 
 import com.merchant.analysis.execution.AnalysisContext;
+import com.merchant.analysis.calculation.DecimalMath;
+import com.merchant.analysis.time.TimeParameters;
 import com.merchant.analysis.execution.CapabilityExecutor;
 import com.merchant.analysis.time.DateRange;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -34,8 +36,8 @@ public class SkuSalesBreakdownExecutor implements CapabilityExecutor {
 
     @Override
     public Map<String, Object> execute(Map<String, Object> params, AnalysisContext ctx) {
-        Map<String, Double> cur = salesBySku(ctx.current());
-        Map<String, Double> base = salesBySku(ctx.baseline());
+        Map<String, Double> cur = salesBySku(TimeParameters.current(params));
+        Map<String, Double> base = salesBySku(TimeParameters.baseline(params));
         Map<String, String[]> skuInfo = skuInfo();
 
         List<Map<String, Object>> contributors = new ArrayList<>();
@@ -45,7 +47,7 @@ public class SkuSalesBreakdownExecutor implements CapabilityExecutor {
         for (String skuId : skuIds) {
             double curTotal = cur.getOrDefault(skuId, 0.0);
             double baseTotal = base.getOrDefault(skuId, 0.0);
-            double delta = curTotal - baseTotal;
+            double delta = DecimalMath.difference(curTotal, baseTotal);
             if (delta != 0) {   // 涨跌都纳入，场景对「上升/下滑」方向中性
                 String[] info = skuInfo.getOrDefault(skuId, new String[]{skuId, null});
                 Map<String, Object> item = new LinkedHashMap<>();

@@ -44,26 +44,41 @@ public class PlanValidator {
             }
             // 供给校验
             validateSupply(step);
-            // inputs 闭合：引用的上游步骤已产出对应 key
-            for (Map.Entry<String, String> input : step.inputs().entrySet()) {
-                String ref = input.getValue();
-                int dot = ref == null ? -1 : ref.indexOf('.');
-                if (dot <= 0) {
-                    throw new PlanValidationException(step.stepId() + " 的 input " + input.getKey() + " 引用形态非法: " + ref);
-                }
-                PlanStep upstream = byId.get(ref.substring(0, dot));
-                String key = ref.substring(dot + 1);
-                if (upstream == null) {
-                    throw new PlanValidationException(step.stepId() + " 的 input " + input.getKey() + " 引用了不存在的步骤: " + ref);
-                }
-                if (!upstream.outputs().contains(key)) {
-                    throw new PlanValidationException(step.stepId() + " 的 input " + input.getKey()
-                            + " 引用的 " + ref + " 不在上游步骤 outputs 中: " + upstream.outputs());
-                }
-            }
+            step.inputs().values().forEach(reference -> validateReference(step, reference, byId));
+            validateInlineReferences(step, step.params(), byId);
+
         }
 
         detectCycle(plan);
+    }
+
+    private void validateInlineReferences(PlanStep step, Object value, Map<String, PlanStep> byId) {
+        if (value instanceof Map<?, ?> map) {
+            if (map.containsKey("$ref")) {
+                if (map.size() != 1 || !(map.get("$ref") instanceof String))
+                    throw new PlanValidationException("非法结果引用对象: " + step.stepId());
+                validateReference(step, (String) map.get("$ref"), byId);
+            } else map.values().forEach(child -> validateInlineReferences(step, child, byId));
+        } else if (value instanceof java.util.List<?> list) {
+            list.forEach(child -> validateInlineReferences(step, child, byId));
+        }
+    }
+
+    private void validateReference(PlanStep step, String reference, Map<String, PlanStep> byId) {
+        if (reference == null || !reference.matches("[A-Za-z][A-Za-z0-9_]*(\\.(?:[A-Za-z_][A-Za-z0-9_]*|[0-9]+))+"))
+            throw new PlanValidationException(step.stepId() + " 的结果引用形态非法: " + reference);
+        String[] parts = reference.split("\\.");
+        PlanStep upstream = byId.get(parts[0]);
+        if (upstream == null || !upstream.outputs().contains(parts[1]))
+            throw new PlanValidationException(step.stepId() + " 引用了未声明的上游产出: " + reference);
+        Set<String> ancestors = new HashSet<>();
+        java.util.ArrayDeque<String> pending = new java.util.ArrayDeque<>(step.dependsOn());
+        while (!pending.isEmpty()) {
+            String id = pending.removeFirst();
+            if (ancestors.add(id) && byId.containsKey(id)) pending.addAll(byId.get(id).dependsOn());
+        }
+        if (step.stepId().equals(upstream.stepId()) || !ancestors.contains(upstream.stepId()))
+            throw new PlanValidationException(step.stepId() + " 引用结果但未声明上游依赖: " + reference);
     }
 
     private void validateSupply(PlanStep step) {

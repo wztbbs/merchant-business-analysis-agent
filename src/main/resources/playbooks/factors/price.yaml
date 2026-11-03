@@ -3,10 +3,9 @@ factor: price
 steps:
   - step_id: check_price_change
     name: 价格变化排查
-    # 显式依赖 contribution_breakdown：executor 隐式复用其 top_contributors 收敛扫描范围；
-    # 执行层按依赖分层并发，不声明此依赖则本步骤与其同层并发，读不到产出。
-    # 注意：引用的是骨架固定步骤的定义 id，本因子只能挂进含有该步骤的骨架（metric_change_diagnosis）
+    # 该模板依赖诊断骨架的贡献榜；独立工具也可以直接指定 sku 或 sku_ids。
     depends_on: [contribution_breakdown]
+    inputs: { top_contributors: "contribution_breakdown.top_contributors" }
     capabilities: [price_change_query]
     params: { sku: "{{entity.sku}}", time_range: "{{time_range}}" }
     outputs: [price_changes]

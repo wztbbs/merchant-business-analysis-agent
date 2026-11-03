@@ -1,0 +1,53 @@
+name: "substitute_sku_analysis"
+description: "查询指定商品以外的同品类商品总体销售变化；不表示某个指定替代商品销量，也不能证明需求转移。"
+input_schema:
+  type: "object"
+  properties:
+    time_range:
+      $ref: "common:time_range"
+    baseline:
+      $ref: "common:time_range"
+    sku:
+      anyOf:
+        -
+          anyOf:
+            -
+              type: "string"
+              maxLength: 200
+              description: "指定商品名；缺失或未找到时返回空结果，不表示销售为零。"
+            -
+              $ref: "common:reference"
+        -
+          type: "null"
+  required: []
+  additionalProperties: false
+output_schema:
+  type: "object"
+  properties:
+    substitution_effect:
+      x-metrics: ["substitute_sales_amount"]
+      x-scopes: ["sku", "multi_sku", "dynamic_skus"]
+      anyOf:
+        -
+          type: "object"
+          properties:
+            category:
+              anyOf:
+                -
+                  type: "string"
+                -
+                  type: "null"
+            others_current_total:
+              type: "number"
+            others_baseline_total:
+              type: "number"
+            others_delta:
+              type: "number"
+            comment:
+              type: "string"
+          required: ["category", "others_current_total", "others_baseline_total", "others_delta", "comment"]
+          additionalProperties: false
+        -
+          type: "null"
+  required: ["substitution_effect"]
+  additionalProperties: false

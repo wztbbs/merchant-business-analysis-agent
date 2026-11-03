@@ -1,6 +1,7 @@
 package com.merchant.analysis.conversation;
 
 import com.merchant.analysis.understanding.ChainContext;
+import com.merchant.analysis.persistence.RunRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -30,9 +31,16 @@ public class ConversationRepository {
     private static final int CHAIN_CANDIDATE_LIMIT = 2;
 
     private final JdbcTemplate jdbc;
+    private final RunRepository runs;
 
     public ConversationRepository(JdbcTemplate jdbc) {
+        this(jdbc, new RunRepository(jdbc));
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public ConversationRepository(JdbcTemplate jdbc, RunRepository runs) {
         this.jdbc = jdbc;
+        this.runs = runs;
     }
 
     /** 新建会话：title / topic_summary 取首问原文（截断），不产生 LLM 调用 */
@@ -76,17 +84,17 @@ public class ConversationRepository {
      */
     public List<ChainContext> findRecentChainTailsBySession(String sessionId) {
         return pickChainTails(
-                "SELECT r.run_id, COALESCE(r.root_run_id, r.run_id) AS root, r.query, r.understanding_json "
+                "SELECT r.run_id, COALESCE(r.root_run_id, r.run_id) AS root, r.query, r.understanding_json, r.status "
                         + "FROM analysis_run r JOIN conversation_turn t ON t.run_id = r.run_id "
-                        + "WHERE t.session_id = ? ORDER BY r.created_at DESC",
+                        + "WHERE t.session_id = ? AND (r.status='SUCCESS' OR (r.status IN ('PARTIAL','CAPABILITY_MISSING','BUDGET_EXCEEDED','LOOP_DETECTED') AND EXISTS(SELECT 1 FROM step_run sr WHERE sr.run_id=r.run_id AND sr.status='SUCCESS'))) ORDER BY r.created_at DESC",
                 sessionId);
     }
 
     public List<ChainContext> findRecentChainTailsByUser(String merchantId, String userId) {
         return pickChainTails(
-                "SELECT r.run_id, COALESCE(r.root_run_id, r.run_id) AS root, r.query, r.understanding_json "
+                "SELECT r.run_id, COALESCE(r.root_run_id, r.run_id) AS root, r.query, r.understanding_json, r.status "
                         + "FROM analysis_run r JOIN conversation_turn t ON t.run_id = r.run_id "
-                        + "WHERE t.merchant_id = ? AND t.user_id = ? ORDER BY r.created_at DESC",
+                        + "WHERE t.merchant_id = ? AND t.user_id = ? AND (r.status='SUCCESS' OR (r.status IN ('PARTIAL','CAPABILITY_MISSING','BUDGET_EXCEEDED','LOOP_DETECTED') AND EXISTS(SELECT 1 FROM step_run sr WHERE sr.run_id=r.run_id AND sr.status='SUCCESS'))) ORDER BY r.created_at DESC",
                 merchantId, userId);
     }
 
@@ -145,9 +153,11 @@ public class ConversationRepository {
         jdbc.query(sql, rs -> {
             String root = rs.getString(2);
             tailByRoot.putIfAbsent(root, new ChainContext(root, rs.getString(1),
-                    rs.getString(3), rs.getString(4)));
+                    rs.getString(3), rs.getString(4), Map.of(), rs.getString(5)));
         }, args);
-        return new ArrayList<>(tailByRoot.values()).stream().limit(CHAIN_CANDIDATE_LIMIT).toList();
+        return new ArrayList<>(tailByRoot.values()).stream().limit(CHAIN_CANDIDATE_LIMIT)
+                .map(c -> new ChainContext(c.rootRunId(), c.runId(), c.query(), c.understandingJson(),
+                        runs.loadSuccessfulStepOutputs(c.runId()), c.runStatus())).toList();
     }
 
     private static SessionRecord map(ResultSet rs) throws SQLException {

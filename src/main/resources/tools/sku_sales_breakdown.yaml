@@ -1,0 +1,24 @@
+name: "sku_sales_breakdown"
+description: "查询销售额变化绝对值最大的 Top10 SKU，涨跌都含；不是完整商品明细。"
+input_schema:
+  type: "object"
+  properties:
+    time_range:
+      $ref: "common:time_range"
+    baseline:
+      $ref: "common:time_range"
+  required: []
+  additionalProperties: false
+output_schema:
+  type: "object"
+  properties:
+    top_contributors:
+      x-metrics: ["sales_amount"]
+      x-scopes: ["dynamic_skus"]
+      description: "按销售额变化绝对值排序的 Top10；不是全店完整商品列表。"
+      type: "array"
+      items:
+        $ref: "common:contributor"
+      maxItems: 10
+  required: ["top_contributors"]
+  additionalProperties: false

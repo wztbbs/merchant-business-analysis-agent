@@ -183,3 +183,24 @@ CREATE TABLE IF NOT EXISTS conversation_turn (
 );
 
 CREATE INDEX IF NOT EXISTS idx_turn_session ON conversation_turn(session_id, created_at);
+
+CREATE TABLE IF NOT EXISTS react_run (
+    run_id TEXT PRIMARY KEY,
+    state_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS react_event (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL,
+    seq INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    name TEXT,
+    input_json TEXT,
+    output_json TEXT,
+    status TEXT NOT NULL,
+    duration_ms INTEGER NOT NULL,
+    error TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE(run_id, seq)
+);
+CREATE INDEX IF NOT EXISTS idx_react_event_run ON react_event(run_id, seq);

@@ -20,3 +20,12 @@ final_step:
   step_id: final_conclusion
   name: 综合结论与建议
   depends_on: { scope: previous_steps }          # 依赖全部前序步骤
+
+description: 全店销售额变化诊断，以销售贡献榜和活动、流量、价格、缺货等线索排查；不是指定商品逐项诊断或订单量归因。
+coverage:
+  actions: [diagnosis]
+  metrics: [sales_amount]
+  scopes: [shop]
+  candidate_factors: [delisting, traffic, campaign, price, stockout]
+  requires_sku: false
+  max_requirements: 1

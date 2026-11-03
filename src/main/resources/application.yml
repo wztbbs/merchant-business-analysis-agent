@@ -15,6 +15,11 @@ spring:
 server:
   port: 8082
 
+business:
+  time-zone: ${BUSINESS_TIME_ZONE:Asia/Shanghai}
+  # 未指定时默认昨日；数据延迟时可设置实际可用日期 yyyy-MM-dd。
+  data-through: ${BUSINESS_DATA_THROUGH:}
+
 # LLM 提供方：mock（默认，离线可跑）| openai（一切 OpenAI 兼容服务：OpenAI 官方、阿里云百炼、反代等）
 llm:
   provider: ${LLM_PROVIDER:mock}
@@ -25,3 +30,16 @@ llm:
 logging:
   level:
     com.merchant.analysis: info
+
+react:
+  max-model-calls: 12          # 包含一次收尾回答；加载、修复动作同样占决策轮数
+  max-tool-calls: 20          # 失败及缓存复用也计数
+  max-no-progress: 3
+  max-same-errors: 2
+  max-loaded-tools: 12
+  max-load-batch: 5
+  total-timeout-ms: 90000
+  model-timeout-ms: 20000
+  tool-timeout-ms: 5000
+  answer-reserve-ms: 10000
+  max-prompt-chars: 120000

@@ -3,6 +3,7 @@ package com.merchant.analysis.plan;
 import com.merchant.analysis.execution.CapabilityCatalog;
 import com.merchant.analysis.playbook.PlaybookLoader;
 import com.merchant.analysis.understanding.QueryUnderstanding;
+import com.merchant.analysis.time.TimeSpec;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -26,7 +27,7 @@ class PlanWeaverTest {
     @Test
     void diagnosisPlanContainsDelistingFactorAndPassesValidation() {
         QueryUnderstanding understanding = new QueryUnderstanding(
-                "诊断销售额下滑原因", "sales_amount", "last_month", "previous_month",
+                "诊断销售额下滑原因", "sales_amount", TimeSpec.calendar("month", -1), null,
                 new QueryUnderstanding.Entity("无糖可乐"), "delisting", null, null, null,
                 new QueryUnderstanding.Scene("metric_change_diagnosis",
                         List.of("delisting", "campaign", "traffic", "price", "stockout")));
@@ -69,7 +70,7 @@ class PlanWeaverTest {
     @Test
     void queryReportPlanPassesValidation() {
         QueryUnderstanding understanding = new QueryUnderstanding(
-                "查询指标数值", "sales_amount", "last_month", "previous_month",
+                "查询指标数值", "sales_amount", TimeSpec.calendar("month", -1), null,
                 new QueryUnderstanding.Entity(null), null, null, null, null,
                 new QueryUnderstanding.Scene("metric_query_report", List.of()));
 

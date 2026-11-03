@@ -1,6 +1,7 @@
 package com.merchant.analysis.api;
 
 import com.merchant.analysis.conclusion.ConclusionService;
+import com.merchant.analysis.react.*;
 import com.merchant.analysis.conversation.ConversationService;
 import com.merchant.analysis.conversation.SessionRecord;
 import com.merchant.analysis.execution.AnalysisContext;
@@ -14,6 +15,7 @@ import com.merchant.analysis.understanding.ChainContext;
 import com.merchant.analysis.understanding.QueryUnderstanding;
 import com.merchant.analysis.understanding.QueryUnderstandingService;
 import com.merchant.analysis.understanding.UnderstandingResult;
+import com.merchant.analysis.understanding.RoutingDecision;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -47,20 +49,16 @@ public class AnalyzeController {
     private final RunRepository runRepository;
     private final BadQueryCaseRepository badQueryCaseRepository;
     private final ConversationService conversationService;
+    private final ReactService react;
 
     /** 兜底话术：问题超出支持范围时直接返回，不走 plan 链路 */
-    private static final String OUT_OF_SCOPE_REPLY = """
-            这个问题超出了我目前的能力范围。我目前支持三类经营分析问题：
-            1. 指标变化诊断，如「为什么我上个月销售额下滑了」；
-            2. 因子影响评估，如「我把无糖可乐下架了影响大吗」；
-            3. 指标查询/报表，如「上个月销售额是多少」。
-            可以换个问法试试。""";
+    private static final String OUT_OF_SCOPE_REPLY = "我可以帮助分析店铺经营数据，请提出与店铺经营相关的问题。";
 
     public AnalyzeController(QueryUnderstandingService understandingService, PlanWeaver planWeaver,
                              PlanValidator planValidator, ExecutionService executionService,
                              ConclusionService conclusionService, RunRepository runRepository,
                              BadQueryCaseRepository badQueryCaseRepository,
-                             ConversationService conversationService) {
+                             ConversationService conversationService, ReactService react) {
         this.understandingService = understandingService;
         this.planWeaver = planWeaver;
         this.planValidator = planValidator;
@@ -69,6 +67,7 @@ public class AnalyzeController {
         this.runRepository = runRepository;
         this.badQueryCaseRepository = badQueryCaseRepository;
         this.conversationService = conversationService;
+        this.react = react;
     }
 
     @PostMapping("/analyze")
@@ -87,39 +86,38 @@ public class AnalyzeController {
         // 无候选上下文（首次访问 / 无活跃会话）：链为空，按全新问题处理
         List<ChainContext> chains = conv == null ? List.of() : conv.chains();
         UnderstandingResult result = understandingService.understand(query, chains);
-        // 校验兜底：LLM 判了追问但 ref_run_id 不在候选链里（或为空）→ 降级为新问题
-        String refRunId = result.refRunId();
-        if (result.followUp() && (refRunId == null
-                || chains.stream().noneMatch(c -> c.runId().equals(refRunId)))) {
-            result = UnderstandingResult.fresh(result.understanding());
-        }
         // conv 为空时结果必然已被兜底为非追问（候选链为空），直接开新会话
         SessionRecord session = conv == null
                 ? conversationService.createSession(request.merchantId(), request.userId(), query)
                 : conversationService.settle(conv, result, query);
 
-        // 读历史型追问：不新跑 plan，引用被承接 run 的结论与步骤数据回答
-        if (result.followUp() && !result.needsRerun()) {
-            return answerFromHistory(session, result, query);
-        }
-
         QueryUnderstanding understanding = result.understanding();
-
-        // 兜底：意图识别判定超出支持范围（out_of_scope）时，不进 plan/执行链路，直接返回能力说明；
-        // 同时落库 bad_query_case，按 (suggest_action, suggest_object) 聚合统计，驱动新场景支持优先级
-        if ("out_of_scope".equals(understanding.primaryScene())) {
+        RoutingDecision.Mode route = understanding.routing().route();
+        if (route == RoutingDecision.Mode.CLARIFY)
+            return standalone(session, result, query, "NEEDS_CLARIFICATION", understanding.task().clarification_question());
+        if (route == RoutingDecision.Mode.OUT_OF_DOMAIN) {
             badQueryCaseRepository.save(query, understanding);
-            String turnId = conversationService.recordStandaloneTurn(session, result, query, OUT_OF_SCOPE_REPLY);
-            Map<String, Object> r = new LinkedHashMap<>();
-            r.put("session_id", session.sessionId());
-            r.put("turn_id", turnId);
-            r.put("understanding", understanding);
-            r.put("plan", null);
-            r.put("step_results", Map.of());
-            r.put("hypothesis_broken", false);
-            r.put("conclusion", OUT_OF_SCOPE_REPLY);
-            return r;
+            return standalone(session, result, query, "OUT_OF_DOMAIN", OUT_OF_SCOPE_REPLY);
         }
+        if (route == RoutingDecision.Mode.REACT) {
+            String rootRunId = result.followUp() ? rootOf(result.refRunId(), chains) : null;
+            Plan plan = new Plan("react", List.of());
+            String runId = runRepository.createRun(query, plan, understanding, rootRunId);
+            try {
+                ReactResult output = react.execute(runId, understanding, chains);
+                String turnId = conversationService.recordRunTurn(session, result, query, understanding.task().resolved_query(), runId);
+                Map<String, Object> response = reactResponse(runId, understanding, plan, output);
+                response.put("session_id", session.sessionId()); response.put("turn_id", turnId);
+                response.put("is_follow_up", result.followUp()); response.put("follow_up_type", result.followUpType());
+                response.put("ref_run_id", result.refRunId());
+                if (output.status() == ReactStatus.CAPABILITY_MISSING) badQueryCaseRepository.save(query, understanding);
+                return response;
+            } catch (Exception e) {
+                runRepository.finishRun(runId, "FAILED", false, null, String.valueOf(e.getMessage()));
+                throw e;
+            }
+        }
+        if (route == RoutingDecision.Mode.HISTORY) return answerFromHistory(session, result, query);
 
         Plan plan = planWeaver.weave(understanding);
         planValidator.validate(plan);
@@ -131,7 +129,7 @@ public class AnalyzeController {
             AnalysisContext ctx = executionService.execute(plan, understanding, runId);
             String conclusion = conclusionService.conclude(query, plan, ctx);
             runRepository.finishRun(runId, "SUCCESS", ctx.hypothesisBroken(), conclusion, null);
-            String turnId = conversationService.recordRunTurn(session, result, query, null, runId);
+            String turnId = conversationService.recordRunTurn(session, result, query, understanding.task().resolved_query(), runId);
             Map<String, Object> r = buildResponse(runId, understanding, plan, ctx.stepResults(),
                     ctx.hypothesisBroken(), conclusion);
             r.put("session_id", session.sessionId());
@@ -146,18 +144,30 @@ public class AnalyzeController {
         }
     }
 
+    private Map<String, Object> standalone(SessionRecord session, UnderstandingResult result, String query,
+                                           String status, String answer) {
+        String turnId = conversationService.recordStandaloneTurn(session, result, query, answer);
+        Map<String, Object> response = buildResponse(null, result.understanding(), null, Map.of(), false, answer);
+        response.put("status", status);
+        response.put("session_id", session.sessionId()); response.put("turn_id", turnId);
+        response.put("is_follow_up", result.followUp()); response.put("follow_up_type", result.followUpType());
+        response.put("ref_run_id", result.refRunId());
+        return response;
+    }
+
     /** 读历史型追问：引用被承接 run（ref_run_id 可追溯回答依据），不重跑 plan */
     private Map<String, Object> answerFromHistory(SessionRecord session, UnderstandingResult result,
                                                   String query) {
         RunRepository.RunRecord refRun = runRepository.findRun(result.refRunId());
         String answer;
+        boolean available = refRun != null && RunRepository.readable(refRun.status());
         Map<String, Map<String, Object>> stepResults = Map.of();
-        if (refRun == null || !"SUCCESS".equals(refRun.status())) {
+        if (!available) {
             answer = "没有找到可引用的历史分析结果，请重新提问。";
         } else {
             stepResults = runRepository.loadSuccessfulStepOutputs(refRun.runId());
-            answer = conclusionService.answerFollowUp(query, result.followUpType(), refRun.query(),
-                    refRun.conclusion(), stepResults);
+            answer = conclusionService.answerFollowUp(query, result.understanding().task().resolved_query(), result.followUpType(), refRun.query(),
+                    ("SUCCESS".equals(refRun.status()) ? "上次分析已完成。" : "上次分析未全部完成，只能引用已取得的事实。") + "\n" + refRun.conclusion(), stepResults);
         }
         String turnId = conversationService.recordStandaloneTurn(session, result, query, answer);
 
@@ -167,7 +177,12 @@ public class AnalyzeController {
         r.put("is_follow_up", true);
         r.put("follow_up_type", result.followUpType());
         r.put("ref_run_id", result.refRunId());
-        r.put("understanding", null);
+        r.put("understanding", result.understanding());
+        r.put("routing", result.understanding().routing());
+        r.put("original_query", query);
+        r.put("resolved_query", result.understanding().task().resolved_query());
+        r.put("status", available ? "SUCCESS".equals(refRun.status()) ? "SUCCESS" : "PARTIAL" : "HISTORY_UNAVAILABLE");
+        r.put("source_status", refRun == null ? null : refRun.status());
         r.put("plan", null);
         r.put("step_results", stepResults);
         r.put("hypothesis_broken", false);
@@ -194,6 +209,7 @@ public class AnalyzeController {
         }
         Plan plan = RunRepository.planFromJson(run.planJson());
         QueryUnderstanding understanding = RunRepository.understandingFromJson(run.understandingJson());
+        if ("react".equals(run.scene())) return reactResponse(runId, understanding, plan, react.resume(runId, understanding));
 
         if ("SUCCESS".equals(run.status())) {
             return buildResponse(runId, understanding, plan, runRepository.loadSuccessfulStepOutputs(runId),
@@ -212,11 +228,22 @@ public class AnalyzeController {
         }
     }
 
+    private static Map<String, Object> reactResponse(String runId, QueryUnderstanding understanding, Plan plan, ReactResult output) {
+        Map<String, Object> response = buildResponse(runId, understanding, plan, output.stepResults(), false, output.answer());
+        response.put("status", output.status()); response.put("coverage", output.coverage()); response.put("react_stats", output.stats());
+        response.put("trace_url", "/api/react/" + runId);
+        return response;
+    }
+
     private static Map<String, Object> buildResponse(String runId, QueryUnderstanding understanding, Plan plan,
                                                      Map<String, Map<String, Object>> stepResults,
                                                      boolean hypothesisBroken, String conclusion) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("run_id", runId);
+        result.put("status", "SUCCESS");
+        result.put("routing", understanding.routing());
+        result.put("original_query", understanding.task() == null ? null : understanding.task().original_query());
+        result.put("resolved_query", understanding.task() == null ? null : understanding.task().resolved_query());
         result.put("understanding", understanding);
         result.put("plan", plan);
         result.put("step_results", stepResults);

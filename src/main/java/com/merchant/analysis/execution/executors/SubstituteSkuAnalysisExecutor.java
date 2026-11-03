@@ -1,6 +1,8 @@
 package com.merchant.analysis.execution.executors;
 
 import com.merchant.analysis.execution.AnalysisContext;
+import com.merchant.analysis.calculation.DecimalMath;
+import com.merchant.analysis.time.TimeParameters;
 import com.merchant.analysis.execution.CapabilityExecutor;
 import com.merchant.analysis.time.DateRange;
 import org.springframework.dao.EmptyResultDataAccessException;
@@ -36,9 +38,9 @@ public class SubstituteSkuAnalysisExecutor implements CapabilityExecutor {
         }
 
         String category = jdbc.queryForObject("SELECT category FROM sku WHERE sku_id = ?", String.class, skuId);
-        double curOthers = othersSales(skuId, ctx.current());
-        double baseOthers = othersSales(skuId, ctx.baseline());
-        double othersDelta = curOthers - baseOthers;
+        double curOthers = othersSales(skuId, TimeParameters.current(params));
+        double baseOthers = othersSales(skuId, TimeParameters.baseline(params));
+        double othersDelta = DecimalMath.difference(curOthers, baseOthers);
 
         Map<String, Object> effect = new LinkedHashMap<>();
         effect.put("category", category);
@@ -46,8 +48,8 @@ public class SubstituteSkuAnalysisExecutor implements CapabilityExecutor {
         effect.put("others_baseline_total", round(baseOthers));
         effect.put("others_delta", round(othersDelta));
         effect.put("comment", othersDelta > 0
-                ? "同品类其他商品销售上涨，部分承接了流失需求"
-                : "同品类其他商品未增长，流失需求未被承接");
+                ? "同品类其他商品总体销售上涨；仅此不能证明需求转移"
+                : "同品类其他商品总体销售未增长");
         out.put("substitution_effect", effect);
         return out;
     }

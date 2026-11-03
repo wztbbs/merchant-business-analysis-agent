@@ -8,4 +8,7 @@ public interface LlmClient {
 
     /** 单轮对话：输入渲染好的 prompt，输出模型文本 */
     String chat(String prompt);
+
+    /** 运行时仍设置外层硬时限；网络实现应同时使用此剩余预算设置连接和读取时限。 */
+    default String chat(String prompt, java.time.Duration timeout) { return chat(prompt); }
 }

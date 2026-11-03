@@ -1,0 +1,33 @@
+name: "stockout_query"
+description: "查询观察期全店缺货事件流水；没有缺货时长、损失估计或可靠区间配对。"
+input_schema:
+  type: "object"
+  properties:
+    time_range:
+      $ref: "common:time_range"
+  required: []
+  additionalProperties: false
+output_schema:
+  type: "object"
+  properties:
+    stockout_events:
+      x-metrics: ["stockout"]
+      x-scopes: ["shop", "dynamic_skus"]
+      type: "array"
+      items:
+        type: "object"
+        properties:
+          sku_id:
+            type: "string"
+          name:
+            type: "string"
+          event_type:
+            type: "string"
+          event_time:
+            type: "string"
+        required: ["sku_id", "name", "event_type", "event_time"]
+        additionalProperties: false
+    comment:
+      type: "string"
+  required: ["stockout_events", "comment"]
+  additionalProperties: false

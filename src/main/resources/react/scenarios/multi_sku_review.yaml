@@ -1,0 +1,11 @@
+id: multi_sku_review
+name: 指定多商品的经营对照
+description: 用户明确给出两个或多个商品，逐项比较销售变化，按需补充价格和上下架情况。
+examples:
+  - 对比无糖可乐和巧克力上个月的销售变化，看看价格有没有变化。
+recommended_tools: [sku_sales_history, price_change_query, sku_status_query, substitute_sku_analysis, difference, ratio, compare]
+guidance: |
+  识别用户指定的各商品，使用相同观察期和基线期，逐项查询 sku_sales_history。商品未找到时说明，不将 null 当零。
+  仅在问题需要时查询各商品价格和上下架状态。商品间差额、倍数或合计通过计算工具得到，数值使用结果引用。
+  问同品类其他商品总体变化时可使用 substitute_sku_analysis；它不提供指定替代商品销量，也不能证明商品之间的需求转移。
+  获得用户所需对照字段后结束，不自动扩展为全店诊断。

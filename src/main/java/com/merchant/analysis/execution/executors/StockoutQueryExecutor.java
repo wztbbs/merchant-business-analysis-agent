@@ -1,6 +1,7 @@
 package com.merchant.analysis.execution.executors;
 
 import com.merchant.analysis.execution.AnalysisContext;
+import com.merchant.analysis.time.TimeParameters;
 import com.merchant.analysis.execution.CapabilityExecutor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -40,11 +41,11 @@ public class StockoutQueryExecutor implements CapabilityExecutor {
                     m.put("event_time", rs.getString(4));
                     events.add(m);
                 },
-                ctx.current().startTs(), ctx.current().endTs());
+                TimeParameters.current(params).startTs(), TimeParameters.current(params).endTs());
 
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("stockout_events", events);
-        out.put("comment", events.isEmpty() ? "观察期内无缺货事件，缺货因素可排除。" : "观察期内发现 " + events.size() + " 条缺货事件。");
+        out.put("comment", events.isEmpty() ? "观察期内未查询到缺货事件。" : "观察期内发现 " + events.size() + " 条缺货事件。");
         return out;
     }
 }

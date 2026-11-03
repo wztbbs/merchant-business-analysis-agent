@@ -1,0 +1,53 @@
+name: "sku_status_query"
+description: "查询指定 SKU 观察期末状态与两期覆盖窗内最近一次下架记录。"
+input_schema:
+  type: "object"
+  properties:
+    time_range:
+      $ref: "common:time_range"
+    baseline:
+      $ref: "common:time_range"
+    sku:
+      anyOf:
+        -
+          anyOf:
+            -
+              type: "string"
+              maxLength: 200
+              description: "指定商品名；缺失或未找到时返回空结果，不表示销售为零。"
+            -
+              $ref: "common:reference"
+        -
+          type: "null"
+  required: []
+  additionalProperties: false
+output_schema:
+  type: "object"
+  properties:
+    sku:
+      anyOf:
+        -
+          type: "string"
+        -
+          type: "null"
+    sku_id:
+      anyOf:
+        -
+          type: "string"
+        -
+          type: "null"
+    delisting_time:
+      x-metrics: ["listing_status"]
+      x-scopes: ["sku", "multi_sku", "dynamic_skus"]
+      description: "两期覆盖窗口内最近一次下架记录；null 表示未查到。"
+      anyOf:
+        -
+          type: "string"
+        -
+          type: "null"
+    listing_status:
+      x-metrics: ["listing_status"]
+      x-scopes: ["sku", "multi_sku", "dynamic_skus"]
+      enum: ["unknown", "在架", "已下架"]
+  required: ["sku", "sku_id", "delisting_time", "listing_status"]
+  additionalProperties: false

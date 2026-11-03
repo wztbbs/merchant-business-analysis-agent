@@ -9,5 +9,16 @@ package com.merchant.analysis.understanding;
  * @param query             链尾 run 的问题原文
  * @param understandingJson 链尾 run 的意图识别结果（JSON 原文，直接注入 prompt）
  */
-public record ChainContext(String rootRunId, String runId, String query, String understandingJson) {
+public record ChainContext(String rootRunId, String runId, String query, String understandingJson,
+                           java.util.Map<String, java.util.Map<String, Object>> stepResults, String runStatus) {
+    public ChainContext(String rootRunId, String runId, String query, String understandingJson,
+                        java.util.Map<String, java.util.Map<String, Object>> stepResults) {
+        this(rootRunId, runId, query, understandingJson, stepResults, "SUCCESS");
+    }
+    public ChainContext(String rootRunId, String runId, String query, String understandingJson) {
+        this(rootRunId, runId, query, understandingJson, java.util.Map.of(), "SUCCESS");
+    }
+    public ChainContext {
+        stepResults = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(stepResults));
+    }
 }

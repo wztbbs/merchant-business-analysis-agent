@@ -20,3 +20,12 @@ final_step:
   step_id: final_conclusion
   name: 综合结论与建议
   depends_on: { scope: previous_steps }
+
+description: 指定商品下架相关的销售变化和变化贡献查询；不支持无商品的因子评估或因果损失估计。
+coverage:
+  actions: [evaluation]
+  metrics: [sales_amount]
+  scopes: [sku]
+  candidate_factors: [delisting]
+  requires_sku: true
+  max_requirements: 1

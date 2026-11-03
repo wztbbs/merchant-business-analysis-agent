@@ -1,6 +1,8 @@
 package com.merchant.analysis.execution.executors;
 
 import com.merchant.analysis.execution.AnalysisContext;
+import com.merchant.analysis.calculation.DecimalMath;
+import com.merchant.analysis.time.TimeParameters;
 import com.merchant.analysis.execution.CapabilityExecutor;
 import com.merchant.analysis.time.DateRange;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -32,8 +34,8 @@ public class CategorySalesBreakdownExecutor implements CapabilityExecutor {
 
     @Override
     public Map<String, Object> execute(Map<String, Object> params, AnalysisContext ctx) {
-        Map<String, Double> cur = salesByCategory(ctx.current());
-        Map<String, Double> base = salesByCategory(ctx.baseline());
+        Map<String, Double> cur = salesByCategory(TimeParameters.current(params));
+        Map<String, Double> base = salesByCategory(TimeParameters.baseline(params));
 
         Set<String> categories = new HashSet<>(cur.keySet());
         categories.addAll(base.keySet());
@@ -45,7 +47,7 @@ public class CategorySalesBreakdownExecutor implements CapabilityExecutor {
             item.put("category", category);
             item.put("current_total", round(curTotal));
             item.put("baseline_total", round(baseTotal));
-            item.put("delta", round(curTotal - baseTotal));
+            item.put("delta", round(DecimalMath.difference(curTotal, baseTotal)));
             breakdown.add(item);
         }
         // 按 |delta| 降序：变化最大的品类在前，方向由 delta 符号表达（与 sku_sales_breakdown 口径一致）

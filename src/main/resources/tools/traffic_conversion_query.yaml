@@ -1,0 +1,52 @@
+name: "traffic_conversion_query"
+description: "查询全店两期曝光、进店 UV 汇总，以及订单数除以进店 UV 的转化率和差值。"
+input_schema:
+  type: "object"
+  properties:
+    time_range:
+      $ref: "common:time_range"
+    baseline:
+      $ref: "common:time_range"
+  required: []
+  additionalProperties: false
+output_schema:
+  type: "object"
+  properties:
+    traffic_delta:
+      x-metrics: ["traffic"]
+      x-scopes: ["shop"]
+      type: "object"
+      properties:
+        current_exposure:
+          type: "integer"
+        baseline_exposure:
+          type: "integer"
+        exposure_delta:
+          type: "integer"
+        current_visit_uv:
+          type: "integer"
+        baseline_visit_uv:
+          type: "integer"
+        visit_uv_delta:
+          type: "integer"
+      required: ["current_exposure", "baseline_exposure", "exposure_delta", "current_visit_uv", "baseline_visit_uv", "visit_uv_delta"]
+      additionalProperties: false
+    conversion_delta:
+      x-metrics: ["conversion_rate"]
+      x-scopes: ["shop"]
+      description: "两期转化率的比例差值；0.01 表示1个百分点。"
+      type: "object"
+      properties:
+        current_conversion:
+          description: "观察期去重订单数除以进店 UV 汇总，按比例返回。"
+          type: "number"
+        baseline_conversion:
+          description: "基线期去重订单数除以进店 UV 汇总，按比例返回。"
+          type: "number"
+        conversion_delta:
+          description: "两期转化率的比例差值；0.01 表示1个百分点。"
+          type: "number"
+      required: ["current_conversion", "baseline_conversion", "conversion_delta"]
+      additionalProperties: false
+  required: ["traffic_delta", "conversion_delta"]
+  additionalProperties: false

@@ -1,0 +1,95 @@
+name: "sku_sales_history"
+description: "查询指定 SKU 两期销售额、基线日均、占比和销售差值；可引用全店 metric_delta 计算变化贡献率。不能单独证明因果影响。"
+input_schema:
+  type: "object"
+  properties:
+    time_range:
+      $ref: "common:time_range"
+    baseline:
+      $ref: "common:time_range"
+    sku:
+      anyOf:
+        -
+          anyOf:
+            -
+              type: "string"
+              maxLength: 200
+              description: "指定商品名；缺失或未找到时返回空结果，不表示销售为零。"
+            -
+              $ref: "common:reference"
+        -
+          type: "null"
+    metric_delta:
+      description: "全店观察期销售额减基线期销售额，单位元；作为 SKU 变化贡献率分母，建议引用销售汇总结果。"
+      anyOf:
+        -
+          anyOf:
+            -
+              $ref: "common:decimal"
+            -
+              $ref: "common:reference"
+        -
+          type: "null"
+  required: []
+  additionalProperties: false
+output_schema:
+  type: "object"
+  properties:
+    sku:
+      type: "string"
+    sku_total_sales:
+      x-metrics: ["sales_amount"]
+      x-scopes: ["sku", "multi_sku", "dynamic_skus"]
+      description: "指定商品观察期销售额，单位元；null 表示商品未找到。"
+      anyOf:
+        -
+          type: "number"
+        -
+          type: "null"
+    sku_baseline_sales:
+      x-metrics: ["sales_amount"]
+      x-scopes: ["sku", "multi_sku", "dynamic_skus"]
+      description: "指定商品基线期销售额，单位元。"
+      anyOf:
+        -
+          type: "number"
+        -
+          type: "null"
+    sku_daily_avg_sales:
+      x-metrics: ["sales_amount"]
+      x-scopes: ["sku", "multi_sku", "dynamic_skus"]
+      description: "基线期销售额除以基线期自然日数，单位元/日。"
+      anyOf:
+        -
+          type: "number"
+        -
+          type: "null"
+    sku_sales_share:
+      x-metrics: ["sales_share"]
+      x-scopes: ["sku", "multi_sku", "dynamic_skus"]
+      description: "指定商品观察期销售额占全店观察期销售额的比例，0.1 表示10%。"
+      anyOf:
+        -
+          type: "number"
+        -
+          type: "null"
+    sales_delta:
+      x-metrics: ["sales_amount"]
+      x-scopes: ["sku", "multi_sku", "dynamic_skus"]
+      description: "指定商品观察期销售额减基线期销售额，单位元。"
+      anyOf:
+        -
+          type: "number"
+        -
+          type: "null"
+    contribution_ratio:
+      x-metrics: ["sales_amount"]
+      x-scopes: ["sku", "multi_sku", "dynamic_skus"]
+      description: "商品销售差值除以全店销售差值，带符号；零分母或未提供分母时为 null，不是因果影响比例。"
+      anyOf:
+        -
+          type: "number"
+        -
+          type: "null"
+  required: ["sku_total_sales", "sku_daily_avg_sales", "sku_sales_share", "sales_delta", "contribution_ratio"]
+  additionalProperties: false

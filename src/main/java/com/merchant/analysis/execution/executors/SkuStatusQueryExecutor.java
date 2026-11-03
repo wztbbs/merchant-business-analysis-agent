@@ -1,6 +1,7 @@
 package com.merchant.analysis.execution.executors;
 
 import com.merchant.analysis.execution.AnalysisContext;
+import com.merchant.analysis.time.TimeParameters;
 import com.merchant.analysis.execution.CapabilityExecutor;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -10,7 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * sku_status_query：查询 SKU 当前在架状态，以及观察窗（基线期起点 ~ 当前期终点）内最近一次下架时间。
+ * sku_status_query：查询 SKU 观察期末的在架状态，以及两期覆盖窗口内最近一次下架时间。
  * 查不到下架事件时 delisting_time 为 null —— 执行控制器据此判定用户假设不成立。
  */
 @Component("skuStatusQueryExecutor")
@@ -40,16 +41,20 @@ public class SkuStatusQueryExecutor implements CapabilityExecutor {
             return out;
         }
 
-        // 观察窗内的最近一次下架事件
+        var current = TimeParameters.current(params);
+        var baseline = TimeParameters.baseline(params);
+        String windowStart = current.startTs().compareTo(baseline.startTs()) < 0 ? current.startTs() : baseline.startTs();
+        String windowEnd = current.endTs().compareTo(baseline.endTs()) > 0 ? current.endTs() : baseline.endTs();
+        // 两期覆盖窗口内的最近一次下架事件
         String delistingTime = queryOneOrNull(
                 "SELECT event_time FROM sku_status_log WHERE sku_id = ? AND event_type = 'delisting' "
                         + "AND event_time >= ? AND event_time < ? ORDER BY event_time DESC LIMIT 1",
-                skuId, ctx.baseline().startTs(), ctx.current().endTs());
-        // 当前在架状态：以最近一次上下架事件为准
+                skuId, windowStart, windowEnd);
+        // 观察期之后的记录不能改变历史期末状态。
         String lastEvent = queryOneOrNull(
                 "SELECT event_type FROM sku_status_log WHERE sku_id = ? "
-                        + "AND event_type IN ('listing','delisting') ORDER BY event_time DESC LIMIT 1",
-                skuId);
+                        + "AND event_type IN ('listing','delisting') AND event_time < ? ORDER BY event_time DESC LIMIT 1",
+                skuId, current.endTs());
 
         out.put("delisting_time", delistingTime);
         out.put("listing_status", "delisting".equals(lastEvent) ? "已下架" : "在架");

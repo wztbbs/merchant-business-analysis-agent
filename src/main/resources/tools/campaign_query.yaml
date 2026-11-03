@@ -1,0 +1,65 @@
+name: "campaign_query"
+description: "查询两期活动记录及带 activity_id 的订单销售额；不是活动因果增量或活动 ROI。"
+input_schema:
+  type: "object"
+  properties:
+    time_range:
+      $ref: "common:time_range"
+    baseline:
+      $ref: "common:time_range"
+  required: []
+  additionalProperties: false
+output_schema:
+  type: "object"
+  properties:
+    campaign_comparison:
+      x-metrics: ["campaign"]
+      x-scopes: ["shop"]
+      type: "object"
+      properties:
+        current_campaigns:
+          type: "array"
+          items:
+            type: "object"
+            properties:
+              activity_id:
+                type: "string"
+              type:
+                type: "string"
+              start_time:
+                type: "string"
+              end_time:
+                type: "string"
+              rule:
+                type: "string"
+            required: ["activity_id", "type", "start_time", "end_time", "rule"]
+            additionalProperties: false
+        baseline_campaigns:
+          type: "array"
+          items:
+            type: "object"
+            properties:
+              activity_id:
+                type: "string"
+              type:
+                type: "string"
+              start_time:
+                type: "string"
+              end_time:
+                type: "string"
+              rule:
+                type: "string"
+            required: ["activity_id", "type", "start_time", "end_time", "rule"]
+            additionalProperties: false
+        current_campaign_sales:
+          description: "观察期带 activity_id 的订单销售额，单位元；不是活动增量。"
+          type: "number"
+        baseline_campaign_sales:
+          description: "基线期带 activity_id 的订单销售额，单位元。"
+          type: "number"
+        comment:
+          type: "string"
+      required: ["current_campaigns", "baseline_campaigns", "current_campaign_sales", "baseline_campaign_sales", "comment"]
+      additionalProperties: false
+  required: ["campaign_comparison"]
+  additionalProperties: false

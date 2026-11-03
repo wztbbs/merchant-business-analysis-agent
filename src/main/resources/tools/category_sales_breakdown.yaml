@@ -1,0 +1,41 @@
+name: "category_sales_breakdown"
+description: "查询各品类两期销售额和差值，按变化绝对值排序；没有订单数和客单价。"
+input_schema:
+  type: "object"
+  properties:
+    time_range:
+      $ref: "common:time_range"
+    baseline:
+      $ref: "common:time_range"
+  required: []
+  additionalProperties: false
+output_schema:
+  type: "object"
+  properties:
+    category_breakdown:
+      x-metrics: ["sales_amount"]
+      x-scopes: ["category"]
+      description: "各品类两期销售额与差值，按变化绝对值排序。"
+      type: "array"
+      items:
+        type: "object"
+        properties:
+          category:
+            anyOf:
+              -
+                type: "string"
+              -
+                type: "null"
+          current_total:
+            description: "观察期销售额，单位元。"
+            type: "number"
+          baseline_total:
+            description: "基线期销售额，单位元。"
+            type: "number"
+          delta:
+            description: "观察期销售额减基线期销售额，单位元，保留符号。"
+            type: "number"
+        required: ["category", "current_total", "baseline_total", "delta"]
+        additionalProperties: false
+  required: ["category_breakdown"]
+  additionalProperties: false

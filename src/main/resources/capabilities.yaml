@@ -2,61 +2,147 @@
 # executor 为 Spring bean 名（对应 execution/executors 下的 @Component）。
 capabilities:
   - name: sales_summary_query
-    description: 汇总时间范围内销售额/订单量/客单价，并与基线期对比
-    params: [time_range, baseline]
-    produces: [metric_delta, order_delta, aov_delta, current_total, baseline_total]
+    description: "查询两期全店销售额、去重订单数、客单价及差值；缺省时间继承本次分析。"
+    kind: business
+    metrics: ["aov", "order_count", "sales_amount"]
+    scopes: ["shop"]
+    params: ["time_range", "baseline"]
+    produces: ["current_total", "baseline_total", "metric_delta", "order_delta", "aov_delta", "current_orders", "baseline_orders", "current_aov", "baseline_aov"]
     executor: salesSummaryQueryExecutor
 
   - name: sku_sales_breakdown
-    description: SKU 维度销售贡献拆解，产出变化贡献最大的单品榜单（涨跌都含，按 |delta| 排序）
-    params: [time_range, baseline]
+    description: "查询销售额变化绝对值最大的 Top10 SKU，涨跌都含；不是完整商品明细。"
+    kind: business
+    metrics: ["sales_amount"]
+    scopes: ["dynamic_skus"]
+    params: ["time_range", "baseline"]
     produces: [top_contributors]
     executor: skuSalesBreakdownExecutor
 
   - name: category_sales_breakdown
-    description: 品类维度销售拆解
-    params: [time_range, baseline]
+    description: "查询各品类两期销售额和差值，按变化绝对值排序；没有订单数和客单价。"
+    kind: business
+    metrics: ["sales_amount"]
+    scopes: ["category"]
+    params: ["time_range", "baseline"]
     produces: [category_breakdown]
     executor: categorySalesBreakdownExecutor
 
   - name: sku_status_query
-    description: 查询 SKU 上下架状态与最近一次下架时间
-    params: [sku]
-    produces: [delisting_time, listing_status]
+    description: "查询指定 SKU 观察期末状态与两期覆盖窗内最近一次下架记录。"
+    kind: business
+    metrics: ["listing_status"]
+    scopes: ["dynamic_skus", "multi_sku", "sku"]
+    params: ["time_range", "baseline", "sku"]
+    produces: ["sku", "sku_id", "delisting_time", "listing_status"]
     executor: skuStatusQueryExecutor
 
   - name: sku_sales_history
-    description: 单 SKU 销售历史：当前期总量/日均/占比/销售变化量（带符号）/贡献率（贡献率依赖上游输入 total_delta）
-    params: [sku, time_range]
-    produces: [sku_daily_avg_sales, sku_total_sales, sku_sales_share, sales_delta, contribution_ratio]
+    description: "查询指定 SKU 两期销售额、基线日均、占比和销售差值；可引用全店 metric_delta 计算变化贡献率。不能单独证明因果影响。"
+    kind: business
+    metrics: ["sales_amount", "sales_share"]
+    scopes: ["dynamic_skus", "multi_sku", "sku"]
+    params: ["time_range", "baseline", "sku", "metric_delta"]
+    produces: ["sku", "sku_total_sales", "sku_baseline_sales", "sku_daily_avg_sales", "sku_sales_share", "sales_delta", "contribution_ratio"]
     executor: skuSalesHistoryExecutor
 
   - name: substitute_sku_analysis
-    description: 同品类其他 SKU 销量变化，评估替代效应
-    params: [sku, time_range]
+    description: "查询指定商品以外的同品类商品总体销售变化；不表示某个指定替代商品销量，也不能证明需求转移。"
+    kind: business
+    metrics: ["substitute_sales_amount"]
+    scopes: ["dynamic_skus", "multi_sku", "sku"]
+    params: ["time_range", "baseline", "sku"]
     produces: [substitution_effect]
     executor: substituteSkuAnalysisExecutor
 
   - name: campaign_query
-    description: 活动对比：当前期 vs 基线期的活动有无及活动期销售
-    params: [time_range, baseline]
+    description: "查询两期活动记录及带 activity_id 的订单销售额；不是活动因果增量或活动 ROI。"
+    kind: business
+    metrics: ["campaign"]
+    scopes: ["shop"]
+    params: ["time_range", "baseline"]
     produces: [campaign_comparison]
     executor: campaignQueryExecutor
 
   - name: traffic_conversion_query
-    description: 流量（曝光/进店UV）与转化率对比
-    params: [time_range, baseline]
+    description: "查询全店两期曝光、进店 UV 汇总，以及订单数除以进店 UV 的转化率和差值。"
+    kind: business
+    metrics: ["conversion_rate", "traffic"]
+    scopes: ["shop"]
+    params: ["time_range", "baseline"]
     produces: [traffic_delta, conversion_delta]
     executor: trafficConversionQueryExecutor
 
   - name: price_change_query
-    description: 价格变化排查。作用域三级收敛：指定 sku 则只查该 SKU；否则复用上游 top_contributors；都没有则全店扫描按销售额加权取 TopN
-    params: [sku, time_range]
-    produces: [price_changes]
+    description: "查询两期均价变化至少1%的商品；显式 sku、sku_ids、top_contributors 优先级依次降低，未指定时扫描全店并按销售额取Top10。"
+    kind: business
+    metrics: ["price"]
+    scopes: ["dynamic_skus", "multi_sku", "sku"]
+    params: ["time_range", "baseline", "sku", "sku_ids", "top_contributors"]
+    produces: ["price_changes", "scope", "comment"]
     executor: priceChangeQueryExecutor
 
   - name: stockout_query
-    description: 缺货事件查询
-    params: [time_range]
-    produces: [stockout_events]
+    description: "查询观察期全店缺货事件流水；没有缺货时长、损失估计或可靠区间配对。"
+    kind: business
+    metrics: ["stockout"]
+    scopes: ["dynamic_skus", "shop"]
+    params: ["time_range"]
+    produces: ["stockout_events", "comment"]
     executor: stockoutQueryExecutor
+
+  - name: sum
+    description: "精确求和。数值引用上游结果，调用者需保证指标、时间和单位可比。"
+    kind: calculation
+    params: [input]
+    produces: ["value", "count", "method"]
+    executor: calculationEngine
+
+  - name: avg
+    description: "等权算术平均。数值引用上游结果，调用者需保证指标、时间和单位可比。"
+    kind: calculation
+    params: [input]
+    produces: ["value", "count", "method"]
+    executor: calculationEngine
+
+  - name: min
+    description: "最小值，并列取首个。数值引用上游结果，调用者需保证指标、时间和单位可比。"
+    kind: calculation
+    params: [input]
+    produces: ["value", "count", "index", "item"]
+    executor: calculationEngine
+
+  - name: max
+    description: "最大值，并列取首个。数值引用上游结果，调用者需保证指标、时间和单位可比。"
+    kind: calculation
+    params: [input]
+    produces: ["value", "count", "index", "item"]
+    executor: calculationEngine
+
+  - name: compare
+    description: "比较大小，返回greater/less/equal。数值引用上游结果，调用者需保证指标、时间和单位可比。"
+    kind: calculation
+    params: [input]
+    produces: ["value", "relation"]
+    executor: calculationEngine
+
+  - name: difference
+    description: "计算left-right，保留符号。数值引用上游结果，调用者需保证指标、时间和单位可比。"
+    kind: calculation
+    params: [input]
+    produces: ["value"]
+    executor: calculationEngine
+
+  - name: ratio
+    description: "计算left/right及百分数，right必须大于零。数值引用上游结果，调用者需保证指标、时间和单位可比。"
+    kind: calculation
+    params: [input]
+    produces: ["value", "percent"]
+    executor: calculationEngine
+
+  - name: relative_change
+    description: "计算(current-baseline)/baseline及百分数，baseline必须大于零。数值引用上游结果，调用者需保证指标、时间和单位可比。"
+    kind: calculation
+    params: [input]
+    produces: ["value", "percent"]
+    executor: calculationEngine

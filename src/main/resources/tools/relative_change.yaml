@@ -1,0 +1,36 @@
+name: "relative_change"
+description: "计算(current-baseline)/baseline及百分数，baseline必须大于零。数值引用上游结果，调用者需保证指标、时间和单位可比。"
+input_schema:
+  type: "object"
+  properties:
+    input:
+      type: "object"
+      properties:
+        current:
+          anyOf:
+            -
+              $ref: "common:decimal"
+            -
+              $ref: "common:reference"
+        baseline:
+          description: "对比期。省略时沿用本次分析同观察期的基线；观察期改变时推导前一可比周期。"
+          anyOf:
+            -
+              $ref: "common:decimal"
+            -
+              $ref: "common:reference"
+      required: ["current", "baseline"]
+      additionalProperties: false
+  required: ["input"]
+  additionalProperties: false
+output_schema:
+  type: "object"
+  properties:
+    value:
+      description: "计算结果的十进制字符串，可供后续算子引用。"
+      type: "string"
+    percent:
+      description: "value乘100后的百分数；展示时直接加百分号，不要再次乘100。"
+      type: "string"
+  required: ["value", "percent"]
+  additionalProperties: false

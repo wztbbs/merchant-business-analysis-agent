@@ -1,0 +1,14 @@
+id: top_sku_drilldown
+name: 主要变化单品的逐项核查
+description: 先找出变化较大的商品，再按实际结果选择商品，逐项核查销售、状态、价格或缺货；分析对象在执行中确定。
+examples:
+  - 上个月变化最大的商品有哪些？挑销售下降的几个，看看有没有下架、缺货或者价格变化。
+recommended_tools: [sku_sales_breakdown, sku_sales_history, sku_status_query, price_change_query, stockout_query, sales_summary_query]
+guidance: |
+  先查询 sku_sales_breakdown，取得按销售额变化绝对值排序的 Top10。按用户要求选择上涨或下降候选，未指定数量时优先核查最多三个。
+  榜单不是全店完整商品集合；榜单没有下降商品时，只说明本次 Top10 没有包含，不推断全店没有下降商品。
+  对选中商品按需查询 sku_sales_history、sku_status_query 或 price_change_query；商品身份引用前一步结果，不凭记忆抄写。
+  核查缺货时查询一次 stockout_query，按 sku_id 对照候选，不为每个商品重复读取全店流水。
+  用户要求整体变化贡献率时，再调用 sales_summary_query，将 metric_delta 作为结果引用提供给 sku_sales_history。
+  区分观察期末上下架状态、两期覆盖窗内下架记录和观察期缺货流水。事件与变化同时出现不能直接证明因果。
+  得到用户所需证据后结束；预算不足时说明只核查了部分候选。

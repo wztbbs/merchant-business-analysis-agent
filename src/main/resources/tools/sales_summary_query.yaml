@@ -1,0 +1,61 @@
+name: "sales_summary_query"
+description: "查询两期全店销售额、去重订单数、客单价及差值；缺省时间继承本次分析。"
+input_schema:
+  type: "object"
+  properties:
+    time_range:
+      $ref: "common:time_range"
+    baseline:
+      $ref: "common:time_range"
+  required: []
+  additionalProperties: false
+output_schema:
+  type: "object"
+  properties:
+    current_total:
+      x-metrics: ["sales_amount"]
+      x-scopes: ["shop"]
+      description: "观察期销售额，单位元。"
+      type: "number"
+    baseline_total:
+      x-metrics: ["sales_amount"]
+      x-scopes: ["shop"]
+      description: "基线期销售额，单位元。"
+      type: "number"
+    metric_delta:
+      x-metrics: ["sales_amount"]
+      x-scopes: ["shop"]
+      description: "全店观察期销售额减基线期销售额，单位元；作为 SKU 变化贡献率分母，建议引用销售汇总结果。"
+      type: "number"
+    order_delta:
+      x-metrics: ["order_count"]
+      x-scopes: ["shop"]
+      description: "观察期订单数减基线期订单数。"
+      type: "integer"
+    aov_delta:
+      x-metrics: ["aov"]
+      x-scopes: ["shop"]
+      description: "两期客单价差值，单位元/单。"
+      type: "number"
+    current_orders:
+      x-metrics: ["order_count"]
+      x-scopes: ["shop"]
+      description: "观察期去重订单数。"
+      type: "integer"
+    baseline_orders:
+      x-metrics: ["order_count"]
+      x-scopes: ["shop"]
+      description: "基线期去重订单数。"
+      type: "integer"
+    current_aov:
+      x-metrics: ["aov"]
+      x-scopes: ["shop"]
+      description: "观察期销售额除以订单数，单位元/单。"
+      type: "number"
+    baseline_aov:
+      x-metrics: ["aov"]
+      x-scopes: ["shop"]
+      description: "基线期销售额除以订单数，单位元/单。"
+      type: "number"
+  required: ["current_total", "baseline_total", "metric_delta", "order_delta", "aov_delta", "current_orders", "baseline_orders", "current_aov", "baseline_aov"]
+  additionalProperties: false

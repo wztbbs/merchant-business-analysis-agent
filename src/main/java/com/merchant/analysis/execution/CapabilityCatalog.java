@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class CapabilityCatalog {
 
     public record CapabilityDef(String name, String description, List<String> params,
-                                List<String> produces, String executor) {
+                                List<String> produces, String executor, String kind, List<String> metrics, List<String> scopes) {
     }
 
     private final Map<String, CapabilityDef> defs = new ConcurrentHashMap<>();
@@ -29,20 +29,28 @@ public class CapabilityCatalog {
             for (Map<String, Object> m : list) {
                 CapabilityDef def = new CapabilityDef(
                         str(m, "name"), str(m, "description"),
-                        strList(m, "params"), strList(m, "produces"), str(m, "executor"));
-                defs.put(def.name(), def);
+                        strList(m, "params"), strList(m, "produces"), str(m, "executor"),
+                        m.containsKey("kind") ? str(m, "kind") : "business", strList(m, "metrics"), strList(m, "scopes"));
+                if (def.name() == null || !def.name().matches("[a-z][a-z0-9_]*")
+                        || !java.util.Set.of("business", "calculation").contains(def.kind())
+                        || defs.putIfAbsent(def.name(), def) != null)
+                    throw new IllegalArgumentException("工具名称重复或元数据非法: " + def.name());
             }
         } catch (Exception e) {
             throw new IllegalStateException("加载 capabilities.yaml 失败", e);
         }
     }
 
+    public List<CapabilityDef> all() {
+        return defs.values().stream().sorted(java.util.Comparator.comparing(CapabilityDef::name)).toList();
+    }
+
     public boolean exists(String name) {
-        return defs.containsKey(name);
+        return name != null && defs.containsKey(name);
     }
 
     public CapabilityDef get(String name) {
-        CapabilityDef def = defs.get(name);
+        CapabilityDef def = name == null ? null : defs.get(name);
         if (def == null) {
             throw new IllegalArgumentException("能力目录中不存在: " + name);
         }

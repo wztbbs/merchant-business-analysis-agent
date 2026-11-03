@@ -1,0 +1,13 @@
+id: stockout_sales_crosscheck
+name: 缺货商品与销售下降交叉核查
+description: 以缺货事件为入口，对发生过缺货的商品逐项检查两期销售变化，找出同期销售下降的商品。
+examples:
+  - 上个月发生过缺货的商品里，哪些销售也下降了？
+recommended_tools: [stockout_query, sku_sales_history, sales_summary_query]
+guidance: |
+  先调用 stockout_query，按 sku_id 去重形成商品集合。多条缺货事件不能当成多个商品；没有记录时结束。
+  使用同一观察期和基线期，对这些商品逐项调用 sku_sales_history，按 sales_delta 筛出下降商品。商品身份使用结果引用。
+  用户要求占整体变化的贡献率时，再查询 sales_summary_query，引用 metric_delta 作为分母。
+  只说明缺货与销售下降同时出现，不能将整期销售差值认定为缺货损失。
+  原始流水不等于经过校验的缺货区间；当前没有缺货时长或反事实损失工具，不自行配对或估算。
+  查询商品较多时遵守运行预算，明确标注未完成全量核查，不输出全量排名。

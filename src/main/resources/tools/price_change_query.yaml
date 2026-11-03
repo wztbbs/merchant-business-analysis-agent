@@ -1,0 +1,70 @@
+name: "price_change_query"
+description: "查询两期均价变化至少1%的商品；显式 sku、sku_ids、top_contributors 优先级依次降低，未指定时扫描全店并按销售额取Top10。"
+input_schema:
+  type: "object"
+  properties:
+    time_range:
+      $ref: "common:time_range"
+    baseline:
+      $ref: "common:time_range"
+    sku:
+      anyOf:
+        -
+          anyOf:
+            -
+              type: "string"
+              maxLength: 200
+              description: "指定商品名；缺失或未找到时返回空结果，不表示销售为零。"
+            -
+              $ref: "common:reference"
+        -
+          type: "null"
+    sku_ids:
+      anyOf:
+        -
+          type: "array"
+          items:
+            type: "string"
+            minLength: 1
+          maxItems: 10000
+        -
+          $ref: "common:reference"
+    top_contributors:
+      description: "按销售额变化绝对值排序的 Top10；不是全店完整商品列表。"
+      anyOf:
+        -
+          type: "array"
+          items:
+            $ref: "common:contributor"
+          maxItems: 10000
+        -
+          $ref: "common:reference"
+  required: []
+  additionalProperties: false
+output_schema:
+  type: "object"
+  properties:
+    price_changes:
+      x-metrics: ["price"]
+      x-scopes: ["sku", "multi_sku", "dynamic_skus"]
+      type: "array"
+      items:
+        type: "object"
+        properties:
+          sku_id:
+            type: "string"
+          baseline_avg_price:
+            type: "number"
+          current_avg_price:
+            type: "number"
+          change_ratio:
+            description: "(观察期均价-基线期均价)/基线期均价，按比例返回。"
+            type: "number"
+        required: ["sku_id", "baseline_avg_price", "current_avg_price", "change_ratio"]
+        additionalProperties: false
+    scope:
+      type: "string"
+    comment:
+      type: "string"
+  required: ["price_changes", "scope", "comment"]
+  additionalProperties: false

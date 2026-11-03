@@ -54,7 +54,7 @@ class QueryUnderstandingFollowUpTest {
         assertTrue(r.needsRerun());
         // 继承链尾槽位，只覆盖 metric
         assertEquals("order_count", r.understanding().metric());
-        assertEquals("last_month", r.understanding().time_range());
+        assertEquals(com.merchant.analysis.time.TimeSpec.calendar("month", -1), r.understanding().time_range());
         assertEquals("无糖可乐", r.understanding().skuOrNull());
         assertEquals("delisting", r.understanding().candidate_factor());
         assertEquals("metric_change_diagnosis", r.understanding().primaryScene());

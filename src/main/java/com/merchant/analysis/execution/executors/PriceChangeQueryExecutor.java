@@ -1,6 +1,8 @@
 package com.merchant.analysis.execution.executors;
 
 import com.merchant.analysis.execution.AnalysisContext;
+import com.merchant.analysis.calculation.DecimalMath;
+import com.merchant.analysis.time.TimeParameters;
 import com.merchant.analysis.execution.CapabilityExecutor;
 import com.merchant.analysis.time.DateRange;
 import org.springframework.dao.EmptyResultDataAccessException;
@@ -21,9 +23,9 @@ import java.util.Set;
  *
  * 作用域三级收敛（优先级从高到低），保证几千个 SKU 的商家产出也有界：
  * 1. params.sku 非空 → 只查该 SKU（因子影响评估场景，entity 直接给定）；
- * 2. ctx 中已有上游贡献拆解产出 top_contributors → 只查这些 SKU
- *    （隐式约定：不在 plan 的 inputs 中声明，以保证因子模块跨场景可移植）；
- * 3. 否则全店扫描，命中的变化按销售额加权取前 TOP_N。
+ * 2. params.sku_ids → 显式商品 ID 集合；
+ * 3. params.top_contributors → 显式上游贡献榜；
+ * 4. 未指定范围时扫描全店，按销售额取前 TOP_N。
  */
 @Component("priceChangeQueryExecutor")
 public class PriceChangeQueryExecutor implements CapabilityExecutor {
@@ -50,10 +52,10 @@ public class PriceChangeQueryExecutor implements CapabilityExecutor {
 
     @Override
     public Map<String, Object> execute(Map<String, Object> params, AnalysisContext ctx) {
-        Scope scope = resolveScope(params, ctx);
+        Scope scope = resolveScope(params);
         // sku_id → [avg_price, total_sales]
-        Map<String, double[]> cur = skuStats(ctx.current(), scope.skuIds());
-        Map<String, double[]> base = skuStats(ctx.baseline(), scope.skuIds());
+        Map<String, double[]> cur = skuStats(TimeParameters.current(params), scope.skuIds());
+        Map<String, double[]> base = skuStats(TimeParameters.baseline(params), scope.skuIds());
 
         Map<String, Double> salesWeight = new HashMap<>();
         List<Map<String, Object>> changes = new ArrayList<>();
@@ -62,7 +64,7 @@ public class PriceChangeQueryExecutor implements CapabilityExecutor {
             if (baseStat == null || baseStat[0] == 0) {
                 continue;
             }
-            double changeRatio = (e.getValue()[0] - baseStat[0]) / baseStat[0];
+            double changeRatio = DecimalMath.quotient(DecimalMath.difference(e.getValue()[0], baseStat[0]), baseStat[0]);
             if (Math.abs(changeRatio) >= CHANGE_THRESHOLD) {
                 Map<String, Object> item = new LinkedHashMap<>();
                 item.put("sku_id", e.getKey());
@@ -88,32 +90,27 @@ public class PriceChangeQueryExecutor implements CapabilityExecutor {
         out.put("price_changes", changes);
         out.put("scope", scope.description());
         out.put("comment", changes.isEmpty()
-                ? "两期均价无明显变化（" + scope.description() + "），价格因素可排除。"
+                ? "当前查询未返回可比较的明显均价变化（" + scope.description() + "）。"
                 : "发现 " + changes.size() + " 个 SKU 均价明显变化（" + scope.description() + "）。");
         return out;
     }
 
-    private Scope resolveScope(Map<String, Object> params, AnalysisContext ctx) {
+    private Scope resolveScope(Map<String, Object> params) {
         // 规则 1：显式 sku 参数
         Object sku = params.get("sku");
         if (sku instanceof String skuName && !skuName.isBlank()) {
             String skuId = skuIdOf(skuName);
             return new Scope(skuId == null ? Set.of() : Set.of(skuId), "指定SKU「" + skuName + "」");
         }
-        // 规则 2：隐式复用上游贡献拆解的 top_contributors（如 S2 已先执行）
-        for (Map<String, Object> stepResult : ctx.stepResults().values()) {
-            Object contributors = stepResult.get("top_contributors");
-            if (contributors instanceof List<?> list && !list.isEmpty()) {
-                Set<String> ids = new LinkedHashSet<>();
-                for (Object o : list) {
-                    if (o instanceof Map<?, ?> m && m.get("sku_id") != null) {
-                        ids.add(m.get("sku_id").toString());
-                    }
-                }
-                if (!ids.isEmpty()) {
-                    return new Scope(ids, "上游贡献拆解 Top SKU（" + ids.size() + " 个）");
-                }
-            }
+        if (params.get("sku_ids") instanceof List<?> ids) {
+            Set<String> selected = new LinkedHashSet<>();
+            for (Object id : ids) selected.add((String) id);
+            return new Scope(selected, "显式SKU集合（" + selected.size() + " 个）");
+        }
+        if (params.get("top_contributors") instanceof List<?> list) {
+            Set<String> ids = new LinkedHashSet<>();
+            for (Object item : list) ids.add((String) ((Map<?, ?>) item).get("sku_id"));
+            return new Scope(ids, "上游贡献拆解 Top SKU（" + ids.size() + " 个）");
         }
         // 规则 3：全店扫描兜底
         return new Scope(null, "全店扫描，按销售额加权取前 " + TOP_N);

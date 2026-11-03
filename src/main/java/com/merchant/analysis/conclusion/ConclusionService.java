@@ -58,6 +58,7 @@ public class ConclusionService {
     public String conclude(String query, Plan plan, AnalysisContext ctx) {
         String prompt = promptTemplate
                 .replace("{{query}}", query)
+                .replace("{{resolved_query}}", ctx.understanding().task() == null ? query : ctx.understanding().task().resolved_query())
                 .replace("{{output_requirement}}", outputRequirement(plan, ctx))
                 .replace("{{factor_docs}}", factorDocs(plan))
                 .replace("{{step_results}}", stepResultsJson(ctx));
@@ -85,8 +86,14 @@ public class ConclusionService {
     /** 读历史型追问：不新跑 plan，用上次 run 的结论与步骤产出回答 */
     public String answerFollowUp(String query, String followUpType, String prevQuery, String prevConclusion,
                                  Map<String, Map<String, Object>> stepResults) {
+        return answerFollowUp(query, query, followUpType, prevQuery, prevConclusion, stepResults);
+    }
+
+    public String answerFollowUp(String query, String resolvedQuery, String followUpType, String prevQuery,
+                                 String prevConclusion, Map<String, Map<String, Object>> stepResults) {
         String prompt = followUpPromptTemplate
                 .replace("{{query}}", query)
+                .replace("{{resolved_query}}", resolvedQuery)
                 .replace("{{follow_up_type}}", followUpType)
                 .replace("{{prev_query}}", prevQuery)
                 .replace("{{prev_conclusion}}", prevConclusion == null ? "" : prevConclusion)
@@ -115,6 +122,7 @@ public class ConclusionService {
         Map<String, Object> meta = new LinkedHashMap<>();
         meta.put("hypothesis_broken", ctx.hypothesisBroken());
         meta.put("hypothesis_note", ctx.hypothesisNote());
+        meta.put("resolved_time", ctx.understanding().resolved_time());
         payload.put("_meta", meta);
         return toJson(payload);
     }

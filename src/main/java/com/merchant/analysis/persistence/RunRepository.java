@@ -59,6 +59,10 @@ public class RunRepository {
                 runId);
     }
 
+    public static boolean readable(String status) {
+        return status != null && java.util.Set.of("SUCCESS", "PARTIAL", "CAPABILITY_MISSING", "BUDGET_EXCEEDED", "LOOP_DETECTED").contains(status);
+    }
+
     /** 重试：运行记录重置为 RUNNING */
     public void markRunRunning(String runId) {
         jdbc.update("UPDATE analysis_run SET status='RUNNING', error=NULL, finished_at=NULL WHERE run_id=?", runId);
